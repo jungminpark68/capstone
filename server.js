@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
 import {questionPrompt,draftPrompt,imagePrompt} from './prompts.js';
-const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html']};
+const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/storage.js':['public/storage.js','text/javascript'],'/state.js':['public/state.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html']};
 export function createApp({env=process.env,fetcher=fetch}={}) {
  const ai=Boolean(env.DIARY_API_KEY?.trim());
  async function api(path,payload,timeout=45000){
