@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {describeApiError} from './api-errors.js';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
@@ -8,7 +9,7 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
  const ai=Boolean(env.DIARY_API_KEY?.trim());
  async function api(path,payload,timeout=45000){
   const r=await fetcher('https://api.openai.com/v1'+path,{method:'POST',signal:AbortSignal.timeout(timeout),headers:{Authorization:`Bearer ${env.DIARY_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  if(!r.ok){const msg={401:'API 키가 유효한지 확인해 주세요.',403:'모델 접근 권한이나 조직 인증을 확인해 주세요.',429:'API 잔액 또는 호출 한도를 확인하고 잠시 뒤 다시 시도해 주세요.'};throw new Error(msg[r.status]||`AI 서비스 요청이 실패했어요 (HTTP ${r.status}).`);}return r.json();
+  if(!r.ok)throw await describeApiError(r);return r.json();
  }
  async function chat(system,session){const result=await api('/chat/completions',{model:env.DIARY_MODEL||'gpt-4o-mini',response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'user',content:[{type:'text',text:JSON.stringify({turns:session.turns,context:contextOf(session.turns)})},...session.photos.map(url=>({type:'image_url',image_url:{url,detail:'low'}}))]}]});return JSON.parse(result.choices[0].message.content);}
  return http.createServer(async(req,res)=>{

@@ -4,7 +4,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 root = Path(__file__).resolve().parent.parent
 output = root.parent / 'memory-diary-windows.zip'
 files = ['package.json', '.gitignore', '.env.example', 'start-windows.cmd', 'README.md',
-         'server.js', 'diary.js', 'prompts.js', 'demo.html']
+         'server.js', 'api-errors.js', 'diary.js', 'prompts.js', 'demo.html']
 for folder in ['public', 'scripts', 'test']:
     files.extend(str(p.relative_to(root)) for p in (root / folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts)
 with ZipFile(output, 'w', ZIP_DEFLATED) as archive:

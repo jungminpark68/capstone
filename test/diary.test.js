@@ -46,3 +46,11 @@ test('인증 및 잘못된 이미지 응답을 성공으로 처리하지 않는�
  const denied=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>new Response('denied',{status:401})});assert.match((await denied('/api/question',{turns:[]})).data.error,/키/);
  const broken=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>Response.json({data:[]})});assert.equal((await broken('/api/illustration',{title:'t',body:'b',scene:'s'})).status,502);
 });
+
+test('상세 오류 분류와 민감한 원문 비노출',async t=>{
+ const {describeApiError}=await import('../api-errors.js');
+ const billing=await describeApiError(Response.json({error:{code:'billing_hard_limit_reached',message:'Billing limit reached'}},{status:400}));assert.match(billing.message,/결제/);assert.match(billing.message,/code=billing_hard_limit_reached/);
+ const unsupported=await describeApiError(Response.json({error:{code:'unsupported_parameter',param:'quality',message:'Unsupported option with sk-secret and private prompt'}},{status:400}));assert.match(unsupported.message,/param=quality/);assert.doesNotMatch(unsupported.message,/sk-secret|private prompt/);
+ const plain=await describeApiError(new Response('private upstream response',{status:400}));assert.match(plain.message,/HTTP 400/);assert.doesNotMatch(plain.message,/private/);
+ const req=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>Response.json({error:{code:'billing_hard_limit_reached'}},{status:400})});const result=await req('/api/illustration',{title:'산책',body:'산책했다.',scene:'공원 산책'});assert.match(result.data.error,/code=billing_hard_limit_reached/);
+});
