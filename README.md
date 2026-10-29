@@ -21,7 +21,7 @@ node --env-file-if-exists=.env server.js
 ```dotenv
 DIARY_API_KEY=본인의_실제_API_키
 DIARY_MODEL=gpt-4o-mini
-DIARY_IMAGE_MODEL=gpt-image-1
+DIARY_IMAGE_MODEL=gpt-image-2.5-sunburst
 PORT=3000
 ```
 
@@ -39,7 +39,7 @@ API 키가 없으면 체험 모드로 작동합니다. 사진을 분석하지 �
 
 ## AI 및 개인정보
 
-회상 대화/글은 이미지 입력·JSON 출력을 지원하는 Chat Completions 모델을 사용합니다. 삽화는 Images Generations API에서 1024×1024, low quality, JPEG로 생성합니다. 기본값은 각각 `gpt-4o-mini`, `gpt-image-1`이며 계정에서 이용 가능한지 확인해야 합니다. 실제 AI 품질과 권한 검증에는 유효한 키가 필요합니다. 생성과 재생성에 API 비용이 발생합니다.
+회상 대화/글은 이미지 입력·JSON 출력을 지원하는 Chat Completions 모델을 사용합니다. 삽화는 Images Generations API에서 1024×1024, low quality, JPEG로 생성합니다. 기본값은 각각 `gpt-4o-mini`, `gpt-image-2.5-sunburst`이며 계정에서 이용 가능한지 확인해야 합니다. 실제 AI 품질과 권한 검증에는 유효한 키가 필요합니다. 생성과 재생성에 API 비용이 발생합니다.
 
 사진과 전체 대화는 질문·초안 생성 시 OpenAI로 전송합니다. 그림 생성에는 사용자가 확인한 제목·본문·장면만 전송합니다. 원본 얼굴을 복제하는 사진 편집 API는 사용하지 않습니다. `prompts.js`에서 역할별 프롬프트를 수정할 수 있습니다.
 
@@ -79,3 +79,12 @@ HTTP 오류에는 민감한 원문 대신 오류 코드(code)와 문제 옵션(p
 - 글씨 크게: 헤더 버튼으로 확대하며 다음 방문에도 유지합니다. 키보드 초점·상태 안내·줄어든 모션 설정을 지원합니다.
 
 기본 문자는 20~21px, 주요 버튼은 최소 56px이며 저시력 사용자의 실제 접근성 평가를 대신하지 않습니다. 브라우저 음성 인식은 기기·네트워크·권한에 따라 달라집니다. 가족 음성은 아직 지원하지 않습니다. 크림색·초록색과 차분한 문구를 쓰되 점수나 진단 표현은 쓰지 않습니다.
+
+
+## 이미지 모델 종료에 따른 설정 변경 (2026-10-29)
+
+OpenAI 공식 SDK에서 `gpt-image-1`은 **2026-10-23 종료**로 안내합니다. 이전 `.env`를 그대로 복사했다면 `DIARY_IMAGE_MODEL=gpt-image-2.5-sunburst`로 직접 수정하고 서버를 재시작하세요. 새 기본값은 기존 환경변수를 덮어쓰지 않습니다. `dall-e-2`와 `dall-e-3`도 종료된 모델이므로 대안으로 설정하지 마세요. 종료된 모델을 지정하면 API를 호출하지 않고 설정 수정 방법을 안내합니다.
+
+공식 근거: https://github.com/openai/openai-node/blob/master/src/resources/images.ts
+
+새 모델의 실제 사용 가능 여부는 해당 API 프로젝트의 접근 권한과 결제 상태에 따라 별도로 확인해야 합니다. 기본 이미지 요청 옵션(1024×1024, low, JPEG)은 공식 SDK의 현재 지원 범위에 맞춥니다. 이 저장소의 모의 API 테스트는 실제 생성 성공이나 가격을 보장하지 않습니다.

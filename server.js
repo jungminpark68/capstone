@@ -1,5 +1,6 @@
 import http from 'node:http';
 import {describeApiError} from './api-errors.js';
+import {imageModel} from './model-config.js';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
@@ -31,7 +32,7 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
      return send(200,{...validateDraft(await chat(draftPrompt,session)),mode:'ai'});
     }
     if(!ai)return send(503,{error:'AI 그림 생성에는 .env 파일의 DIARY_API_KEY 설정이 필요해요. 글 초안은 유지돼요.'});
-    const result=await api('/images/generations',{model:env.DIARY_IMAGE_MODEL||'gpt-image-1',prompt:imagePrompt(draft),size:'1024x1024',quality:'low',output_format:'jpeg'},120000);
+    const result=await api('/images/generations',{model:imageModel(env),prompt:imagePrompt(draft),size:'1024x1024',quality:'low',output_format:'jpeg'},120000);
     const b64=result.data?.[0]?.b64_json;if(typeof b64!=='string'||!b64||b64.length>15000000||!/^[A-Za-z0-9+/]+=*$/.test(b64))throw new Error('AI 그림 응답이 올바르지 않아요. 다시 시도해 주세요.');
     return send(200,{image:`data:image/jpeg;base64,${b64}`,mode:'ai'});
    }
