@@ -1,4 +1,4 @@
-import {validatePlanInput,validatePlans,localPlans,nextDate,experienceTurns} from './public/calendar.js';
+import {validatePlanInput,validatePlans,enrichPlans,localPlans,nextDate,experienceTurns} from './public/calendar.js';
 import http from 'node:http';
 import {describeApiError} from './api-errors.js';
 import {imageModel} from './model-config.js';
@@ -24,7 +24,7 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
     if(req.url==='/api/plans'){
      if(!ai)return send(200,{events:localPlans(session),mode:'local'});
      const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date)});
-     return send(200,{events:validatePlans(result.events,session.date),mode:'ai'});
+     return send(200,{events:enrichPlans(validatePlans(result.events,session.date),session.text),mode:'ai'});
     }
     if(req.url==='/api/question'){
      if(!session.turns.length&&session.todayEvents.length)return send(200,{...localReply(session),mode:'local'});

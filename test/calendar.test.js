@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nextDate,calendarEvent,validDate,localPlans,experienceTurns} from '../public/calendar.js';
+import {nextDate,calendarEvent,validDate,localPlans,experienceTurns,enrichPlans} from '../public/calendar.js';
 import {localReply,localDraft} from '../diary.js';
 import {newSession,restorable} from '../public/state.js';
 import {createApp} from '../server.js';
@@ -56,4 +56,31 @@ test('AI: 캘린더 예정은 별도 맥락, 내일 발언은 초안 입력에�
  const context=JSON.parse(calls[0].messages[1].content[0].text);assert.equal(context.todayEvents[0].title,event.title);assert.match(context.turns[0].answer,/안 가고/);
  await req('draft',{date,todayEvents:[event],turns:[{question:'오늘은요?',answer:'오늘 공원을 걸었어요. 내일 병원에 가요.'}]});
  const draft=JSON.parse(calls[1].messages[1].content[0].text);assert.doesNotMatch(draft.turns[0].answer,/내일/);
+});
+
+test('전달받은 치과 예약은 짧은 방문 제목과 명시한 장소로 정리한다',()=>{
+ const plan=localPlans({date,text:'내일 치과에서 11시에 와야된데요'})[0];
+ assert.deepEqual(plan,{title:'치과 방문',date:'2027-01-01',time:'',location:'치과'});
+ const named=localPlans({date,text:'내일 행복치과에서 오전 11시에 오라고 했어요'})[0];
+ assert.equal(named.title,'치과 방문');assert.equal(named.location,'행복치과');assert.equal(named.time,'11:00');
+ const hospital=localPlans({date,text:'내일 병원에 오후 2시에 가야 돼요'})[0];assert.equal(hospital.title,'병원 방문');assert.equal(hospital.location,'병원');
+});
+test('장소가 없는 일정은 추측하지 않고 근무와 방문을 구분한다',()=>{
+ const unknown=localPlans({date,text:'내일 11시에 와야된데요'})[0];assert.equal(unknown.location,'');
+ const work=localPlans({date,text:'내일 치과에서 일해요'})[0];assert.equal(work.location,'치과');assert.notEqual(work.title,'치과 방문');
+ const separate=localPlans({date,text:'내일 행복치과에 오전 11시에 가요. 그리고 은행에 오후 2시에 가요.'});
+ assert.deepEqual(separate.map(e=>e.location),['행복치과','은행']);
+});
+test('AI 보완은 원문에서만 장소를 채우고 구체적인 할 일과 여러 장소를 보존한다',()=>{
+ const base={title:'내일 11시에 와야됨',date:'2027-01-01',time:'',location:''};
+ assert.deepEqual(enrichPlans([base],'내일 치과에서 11시에 와야된데요')[0],{...base,title:'치과 방문',location:'치과'});
+ const specific=enrichPlans([{...base,title:'스케일링'}],'내일 행복치과에 오후 3시에 스케일링 예약했어요')[0];assert.equal(specific.title,'스케일링');assert.equal(specific.location,'행복치과');
+ const multiple=enrichPlans([{...base,title:'치과 방문'},{...base,title:'은행 방문'}],'내일 치과에서 오전 11시에 와야된대요. 그리고 은행에 오후 2시에 가요.');assert.deepEqual(multiple.map(e=>e.location),['치과','은행']);
+ const ambiguous=enrichPlans([base],'내일 치과에서 11시에 와야된대요. 그리고 은행에 가요.')[0];assert.equal(ambiguous.location,'');
+});
+test('HTTP: 체험·모의 AI 모두 치과 발언에서 장소 누락과 모호한 제목을 보완한다',async t=>{
+ const body={date,text:'내일 치과에서 11시에 와야된데요'};
+ const local=await request(t);const result=await local('plans',body);assert.equal(result.status,200);assert.equal(result.data.events[0].title,'치과 방문');assert.equal(result.data.events[0].location,'치과');
+ const ai=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>Response.json({choices:[{message:{content:JSON.stringify({events:[{title:'내일 11시에 와야됨',date:'2027-01-01',time:'',location:''}]})}}]})});
+ const repaired=await ai('plans',body);assert.equal(repaired.status,200);assert.equal(repaired.data.events[0].title,'치과 방문');assert.equal(repaired.data.events[0].location,'치과');assert.equal(repaired.data.events[0].time,'');
 });
