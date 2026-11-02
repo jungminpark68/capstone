@@ -1,4 +1,4 @@
-import {calendarEvent,nextDate,localPlans,experienceTurns,temporalParts,validDate} from './calendar.js';
+import {calendarEvent,nextDate,localPlans,experienceTurns,temporalParts,validDate,monthDays,shiftMonth} from './calendar.js';
 import {localReply} from './conversation.js';
 import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvents,putEvent,putEvents,removeEvent} from './storage.js';
 import {localDate,readableDate,newSession,currentImage,makeEntry,restorable} from './state.js';
@@ -9,7 +9,7 @@ const writing=new Set(['photos','conversation','rest','tomorrow','review','resul
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
 let calendarReturn='home',editingEventId=null;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
-$('todayLabel').textContent=readableDate(localDate());$('date').value=localDate();
+resetHomeDate();
 function notify(message,error=false,detail=''){
  $('feedback').hidden=!message;$('feedback').classList.toggle('error',error);$('status').textContent=message;
  $('errorDetails').hidden=!detail;$('errorDetails').open=false;$('errorText').textContent=detail;
@@ -17,16 +17,19 @@ function notify(message,error=false,detail=''){
 }
 function stopVoice(){try{recognition?.stop();}catch{}window.speechSynthesis?.cancel();}
 function view(screen,{focus=true}={}){
- stopVoice();active=screen;for(const name of screens)$(name).hidden=name!==screen;
+ stopVoice();active=screen;document.querySelector('.topline').classList.toggle('home-topline',screen==='home');for(const name of screens)$(name).hidden=name!==screen;
  if(state&&writing.has(screen)){state.stage=screen;scheduleSave();}
  const step=['conversation','photos','rest'].includes(screen)?0:screen==='tomorrow'?1:screen==='review'?2:['result','done'].includes(screen)?3:-1;
  $('steps').hidden=step<0;[...$('steps').children].forEach((li,i)=>{if(i===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');});
  $('calendarButton').setAttribute('aria-current',screen==='calendar'?'page':'false');
- if(screen==='home'){renderResume();refreshHomeSchedule();}
+ $('historyButton').setAttribute('aria-current',['history','detail'].includes(screen)?'page':'false');
+ if(screen==='home'){resetHomeDate();renderResume();refreshHomeSchedule();}
+ $('settingsMenu').open=false;
  if(focus){const heading=$(screen).querySelector('h1,h2');requestAnimationFrame(()=>{heading?.focus({preventScroll:true});$('main').scrollIntoView({block:'start',behavior:'instant'});});}
 }
 function renderResume(){
  const draft=state||savedDraft;$('resumeCard').hidden=!draft;
+ if(draft){$('resumeTitle').textContent=draft.date===localDate()?'오늘 쓰던 이야기가 있어요':`${readableDate(draft.date)}에 쓰던 이야기`; $('resumeDraft').textContent='쓰던 이야기 이어쓰기';}
  if(draft)$('resumeDescription').textContent=`${readableDate(draft.date)} · ${draft.draft?.title||draft.turns.find(t=>t.answer)?.answer?.slice(0,48)||'사진과 이야기가 기다리고 있어요.'}`;
 }
 function snapshot(){if(!state)return null;state.updatedAt=new Date().toISOString();return structuredClone(state);}
@@ -61,18 +64,19 @@ function read(text){
 try{if(localStorage.getItem('memory-diary-large-type')==='true'){document.documentElement.classList.add('large-type');$('fontButton').setAttribute('aria-pressed','true');$('fontButton').innerHTML='가<span class="font-label"> 기본 글씨</span>';}}catch{}
 $('fontButton').onclick=()=>{const large=document.documentElement.classList.toggle('large-type');$('fontButton').setAttribute('aria-pressed',String(large));$('fontButton').innerHTML=large?'가<span class="font-label"> 기본 글씨</span>':'가<span class="font-label"> 글씨 크게</span>';try{localStorage.setItem('memory-diary-large-type',String(large));}catch{}};
 $('homeButton').onclick=()=>{notify('');view('home');};$('photosBack').onclick=()=>view('home');$('restHome').onclick=()=>view('home');$('doneHome').onclick=()=>view('home');
-async function start(withPhotos){
+async function start(withPhotos,{date=localDate()}={}){
  if(busy)return;
  if((state||savedDraft)&&!await ask('새 이야기를 시작할까요?','쓰던 이야기는 새 이야기로 바뀌어요. 계속 쓰려면 돌아가기를 눌러주세요.','새로 시작하기'))return;
- if(!$('date').value){notify('기록할 날짜를 선택해 주세요.',true);$('date').focus();return;}
+ if(!validDate(date)){notify('기록할 날짜를 선택해 주세요.',true);$('date').focus();return;}
  let events;try{events=await listEvents();}catch{notify('캘린더를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.',true);return;}
  if(state||savedDraft){try{await clearWorking();}catch{notify('쓰던 이야기를 정리하지 못했어요. 다시 시도해 주세요.',true);return;}}
- state=newSession($('date').value);state.todayEvents=events.filter(e=>e.date===state.date).sort(eventOrder).slice(0,20);notify('');
+ state=newSession(date);state.todayEvents=events.filter(e=>e.date===state.date).sort(eventOrder).slice(0,20);notify('');
  if(withPhotos){renderPhotos();view('photos');await persist();}else{state.stage='conversation';view('conversation');paintConversation();await initialQuestion();}
 }
 $('startPhotos').onclick=()=>start(true);$('startTalk').onclick=()=>start(false);
+$('startOtherTalk').onclick=()=>start(false,{date:$('date').value});$('startOtherPhotos').onclick=()=>start(true,{date:$('date').value});
 async function initialQuestion(){await task(async()=>{const response=await api('question',sessionInput([]));state.question=response.question;state.answer='';paintConversation();view('conversation');await persist();},'첫 이야기를 준비하고 있어요…');}
-$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);state={...newSession(state.date),...state};if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');$('date').value=state.date;renderPhotos();paintConversation();if(state.stage==='tomorrow')paintTomorrow();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
+$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);state={...newSession(state.date),...state};if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');renderPhotos();paintConversation();if(state.stage==='tomorrow')paintTomorrow();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
 async function resize(file){const bitmap=await createImageBitmap(file);try{const scale=Math.min(1,900/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.7);}finally{bitmap.close();}}
 function renderPhotos(){
  $('photoCount').textContent=state?.photos.length?`${state.photos.length}장을 골랐어요. 더 골라도 좋아요. (최대 5장)`:'JPG · PNG · WebP / 한 장당 8MB 이하';$('photoGrid').replaceChildren();$('conversationPhotos').replaceChildren();
@@ -90,6 +94,7 @@ $('photoFiles').onchange=()=>{const files=[...$('photoFiles').files];task(async(
 $('beginPhotos').onclick=()=>{if(!state.photos.length){notify('사진을 고르거나 ‘사진 없이 시작할게요’를 눌러주세요.',true);return;}initialQuestion();};
 $('withoutPhotos').onclick=()=>{state.photos=[];renderPhotos();initialQuestion();};
 function paintConversation(){
+ $('writingDate').textContent=state?`${state.date===localDate()?'오늘 · ':''}${readableDate(state.date)}의 이야기`:'';
  $('scheduleContext').hidden=!state?.todayEvents?.length;if(state?.todayEvents?.length)$('scheduleContext').textContent=`${readableDate(state.date)}의 예정된 일정을 참고하고 있어요. 실제 경험이 다르면 편하게 알려주세요.`;
  $('question').textContent=state?.question||'첫 이야기를 준비하고 있어요.';$('answer').value=state?.answer||'';$('transcript').replaceChildren();
  for(const turn of state?.turns||[]){const p=document.createElement('p');p.textContent=`기억잇다: ${turn.question}\n나: ${turn.answer||'(이 질문은 쉬어갔어요)'}`;$('transcript').append(p);}renderPhotos();
@@ -183,12 +188,13 @@ window.addEventListener('pagehide',()=>persist());
 
 function eventOrder(a,b){return (a.time||'99:99').localeCompare(b.time||'99:99')||a.title.localeCompare(b.title);}
 async function refreshHomeSchedule(){
- try{const date=$('date').value||localDate(),events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);
+ try{const date=localDate(),events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);
+ $('homeSchedule').hidden=!events.length;
  $('homeSchedule').querySelector('strong').textContent=`${date===localDate()?'오늘':readableDate(date)}의 일정`;
  $('homeScheduleText').textContent=events.length?events.map(e=>`${e.time||'시간 미정'} · ${e.title}`).join('\n'):'아직 적어둔 일정이 없어요. 일정이 없어도 편하게 이야기할 수 있어요.';
  }catch{$('homeScheduleText').textContent='이 브라우저에서 캘린더를 읽지 못했어요.';}
 }
-$('date').onchange=refreshHomeSchedule;
+
 async function finishToday(turns){
  if(!experienceTurns(turns).some(t=>t.answer.trim()))throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요. 내일 일정은 다음 단계에서 따로 챙길게요.');
  state.turns=turns;state.answer='';
@@ -237,31 +243,74 @@ function backToToday(){const last=state.turns.pop();if(last){state.question=last
 $('tomorrowBack').onclick=backToToday;
 async function showCalendar(){
  const from=active;if(from!=='calendar')calendarReturn=from;
- await task(async()=>{if(state)await persist();$('calendarDate').value=state?.date||$('date').value||localDate();$('eventForm').hidden=true;await renderCalendar();view('calendar');},'캘린더를 펼치고 있어요…');
+ await task(async()=>{if(state)await persist();$('calendarDate').value=localDate();$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();view('calendar');},'캘린더를 펼치고 있어요…');
 }
 async function renderCalendar(){
  const date=$('calendarDate').value;if(!validDate(date))throw new Error('날짜를 선택해 주세요.');
- const events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);$('calendarEvents').replaceChildren();
+ const all=await listEvents(),events=all.filter(e=>e.date===date).sort(eventOrder);
+ paintMonth(date,all);$('calendarSelectedDate').textContent=`${date===localDate()?'오늘 · ':''}${readableDate(date)}`;$('calendarCount').textContent=events.length?`일정 ${events.length}개`:'';
+ $('calendarEvents').replaceChildren();
  if(!events.length){const p=document.createElement('p');p.className='empty-state';p.textContent='아직 적어둔 일정이 없어요. 아래에서 새 일정을 적을 수 있어요.';$('calendarEvents').append(p);}
  for(const event of events){
   const card=document.createElement('article');card.className='event-card';const h=document.createElement('h2');h.textContent=event.title;const p=document.createElement('p');p.textContent=`${event.time||'시간 미정'}${event.location?' · '+event.location:''}`;
+  const manage=document.createElement('details');manage.className='event-manage';const summary=document.createElement('summary');summary.textContent='고치기 · 삭제';manage.append(summary);
   const actions=document.createElement('div');actions.className='actions';const edit=document.createElement('button');edit.className='secondary';edit.textContent='일정 고치기';edit.onclick=()=>editEvent(event);
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='일정 삭제';remove.onclick=async()=>{if(!await ask('이 일정을 지울까요?',`${event.title} 일정을 캘린더에서 삭제해요.`,'일정 삭제'))return;await task(async()=>{await removeEvent(event.id);await renderCalendar();await refreshHomeSchedule();},'일정을 정리하고 있어요…');};
-  actions.append(edit,remove);card.append(h,p,actions);$('calendarEvents').append(card);
+  actions.append(edit,remove);manage.append(actions);card.append(h,p,manage);$('calendarEvents').append(card);
  }
 }
 function editEvent(event=null){
- editingEventId=event?.id||crypto.randomUUID();$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
+ editingEventId=event?.id||crypto.randomUUID();$('calendarOverview').hidden=true;$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
  for(const [id,key] of [['eventTitle','title'],['eventDate','date'],['eventTime','time'],['eventLocation','location']])$(id).value=event?.[key]||(key==='date'?$('calendarDate').value:'');
  $('eventTitle').focus();
 }
-$('calendarButton').onclick=showCalendar;$('homeCalendar').onclick=showCalendar;
-$('calendarDate').onchange=()=>task(renderCalendar,'일정을 살펴보고 있어요…');
-for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?nextDate($('calendarDate').value,days):localDate();$('eventForm').hidden=true;await renderCalendar();},'일정을 살펴보고 있어요…');
-$('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;};
+$('calendarButton').onclick=showCalendar;
+$('calendarDate').onchange=()=>selectCalendarDate($('calendarDate').value);
+for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?shiftMonth($('calendarDate').value,days):localDate();$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();},'일정을 살펴보고 있어요…');
+$('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;$('calendarOverview').hidden=false;$('addCalendarEvent').focus();};
 $('eventForm').onsubmit=event=>{event.preventDefault();task(async()=>{
  const data=calendarEvent({title:$('eventTitle').value,date:$('eventDate').value,time:$('eventTime').value,location:$('eventLocation').value});
- await putEvent({...data,id:editingEventId,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;await renderCalendar();await refreshHomeSchedule();
+ await putEvent({...data,id:editingEventId,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();await refreshHomeSchedule();
 },'일정을 저장하고 있어요…');};
 $('calendarReturn').onclick=()=>{notify('');view(calendarReturn);};
-$('calendarTalk').onclick=()=>{$('date').value=$('calendarDate').value;start(false);};
+
+function resetHomeDate(){
+ const today=localDate();$('date').value=today;$('homeDate').dataset.date=today;$('todayLabel').textContent=readableDate(today);$('homeDate').textContent=`${readableDate(today)} · 오늘의 일기`;$('otherDateOptions').open=false;
+}
+function paintMonth(selected,events){
+ const [year,month]=selected.split('-');$('calendarMonth').textContent=`${year}년 ${Number(month)}월`;
+ const byDate=new Map();for(const event of [...events].sort(eventOrder)){if(!byDate.has(event.date))byDate.set(event.date,[]);byDate.get(event.date).push(event);}
+ const days=monthDays(selected);$('calendarGrid').replaceChildren();
+ for(let week=0;week<days.length;week+=7){
+  const row=document.createElement('tr');
+  for(const date of days.slice(week,week+7)){
+   const cell=document.createElement('td');if(!date){cell.className='empty-day';row.append(cell);continue;}
+   const items=byDate.get(date)||[],today=date===localDate(),button=document.createElement('button');button.className='calendar-day';button.dataset.date=date;button.tabIndex=date===selected?0:-1;
+   button.setAttribute('aria-pressed',String(date===selected));if(today)button.setAttribute('aria-current','date');
+   button.setAttribute('aria-label',`${readableDate(date)}${today?' 오늘':''}, ${items.length?`일정 ${items.length}개: ${items.map(e=>`${e.time||'시간 미정'} ${e.title}`).join(', ')}`:'일정 없음'}`);
+   const number=document.createElement('span');number.className='day-number';number.textContent=String(Number(date.slice(-2)));button.append(number);
+   if(today){const mark=document.createElement('span');mark.className='today-mark';mark.textContent='오늘';button.append(mark);}
+   if(items.length){const count=document.createElement('span');count.className='day-count';count.textContent=`● ${items.length}개`;const preview=document.createElement('span');preview.className='day-preview';preview.textContent=items[0].title;button.append(count,preview);}
+   button.onclick=()=>selectCalendarDate(date);button.onkeydown=event=>{
+    const step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];let target;
+    if(step!==undefined)target=nextDate(date,step);
+    else if(event.key==='Home')target=nextDate(date,-new Date(`${date}T12:00:00`).getDay());
+    else if(event.key==='End')target=nextDate(date,6-new Date(`${date}T12:00:00`).getDay());
+    else if(event.key==='PageUp'||event.key==='PageDown')target=shiftMonth(date,event.key==='PageUp'?-1:1);
+    if(target){event.preventDefault();selectCalendarDate(target,{focus:true});}
+   };
+   cell.append(button);row.append(cell);
+  }
+  $('calendarGrid').append(row);
+ }
+}
+async function selectCalendarDate(date,{focus=false}={}){
+ if(busy)return;
+ await task(async()=>{if(!validDate(date))throw new Error('날짜를 확인해 주세요.');$('calendarDate').value=date;await renderCalendar();},'이 날의 일정을 살펴보고 있어요…');
+ if(focus)document.querySelector(`.calendar-day[data-date="${date}"]`)?.focus();
+}
+function refreshToday(){if(active==='home'&&$('homeDate').dataset.date!==localDate()){resetHomeDate();refreshHomeSchedule();}else $('todayLabel').textContent=readableDate(localDate());}
+window.addEventListener('focus',refreshToday);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshToday();});
+
+document.addEventListener('click',event=>{if(!$('settingsMenu').contains(event.target))$('settingsMenu').open=false;});
+$('settingsMenu').addEventListener('keydown',event=>{if(event.key==='Escape'){$('settingsMenu').open=false;$('settingsMenu').querySelector('summary').focus();}});

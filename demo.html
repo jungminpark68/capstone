@@ -11,23 +11,74 @@
 @media(max-width:680px){.site-header{flex-wrap:wrap}.site-header nav{width:100%;justify-content:flex-end;flex-wrap:wrap}.steps{gap:10px;font-size:.66rem}.date-navigation button{width:auto;font-size:.82rem}.large-type .steps{flex-wrap:wrap}.plan-card{padding:18px}}
 
 .skip-link:not(:focus){clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}
+
+/* Keep everyday actions prominent; secondary actions are disclosed on demand. */
+.today-pill{display:inline-block;margin-top:22px;padding:7px 15px;border-radius:24px;background:var(--sage);font-size:.85rem;font-weight:700}
+.start-main{background:var(--green);color:white;border-color:var(--green);min-height:100px}
+.start-main:hover{background:var(--green-dark)}
+.start-main small{color:#edf1e8}.start-main .talk-icon{background:#ffffff20;color:white}
+.start-photo{box-shadow:none;justify-content:center;background:transparent;border-color:var(--line);padding:14px;min-height:60px}
+.start-photo span:nth-child(2){flex:initial}.start-photo strong{font-size:.9rem}
+.home-grid .schedule-summary{margin-top:24px}.quiet-options{margin-top:24px;border-top:1px solid var(--line);padding-top:8px}
+.quiet-options[open]{padding-bottom:12px}.quiet-options .actions{margin-top:12px}
+.writing-date{font-size:.8rem;color:var(--green);margin-top:12px}
+.settings-menu{position:relative}.settings-menu>summary{list-style:none;border:1px solid var(--line);border-radius:14px;background:var(--paper);padding:12px 18px;min-height:56px;font-size:.85rem;font-weight:700}
+.settings-menu>summary::-webkit-details-marker{display:none}
+.settings-panel{position:absolute;right:0;top:calc(100% + 8px);width:260px;z-index:20;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 8px 30px #283d3420}
+.settings-panel button{width:100%}.settings-panel .helper{font-size:.75rem}
+.calendar-screen{max-width:960px;margin:0 auto}.calendar-screen>.lead{margin-top:8px}
+.month-toolbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;margin:28px 0 8px}
+.month-toolbar h2{text-align:center;font-size:1.4rem}.month-toolbar button{font-size:.85rem;padding:10px 16px}
+.calendar-legend{display:flex;justify-content:space-between;align-items:center;margin:0 4px 6px;font-size:.75rem;color:var(--green)}
+.month-calendar{width:100%;table-layout:fixed;border-spacing:5px;border-collapse:separate}
+.month-calendar th{font-size:.8rem;padding:8px 0;color:var(--muted)}.month-calendar th:first-child{color:#9c342b}
+.month-calendar td{padding:0;vertical-align:top}.month-calendar .empty-day{background:#eeeee633;border-radius:12px}
+.calendar-day{position:relative;width:100%;min-width:0;min-height:112px;padding:10px 6px 8px;border:2px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--paper);font-weight:500;line-height:1.3}
+.calendar-day:hover{border-color:var(--green);background:var(--sage)}.calendar-day .day-number{font-weight:750;font-size:1.12rem}
+.calendar-day .today-mark{font-size:.6rem;font-weight:700;color:var(--green)}
+.calendar-day .day-count{font-size:.66rem;font-weight:700;color:var(--green);margin-top:auto}
+.calendar-day .day-preview{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.65rem;color:var(--muted)}
+.calendar-day[aria-current=date]{border-color:var(--green)}
+.calendar-day[aria-pressed=true]{background:var(--green);border-color:var(--green);color:white}
+.calendar-day[aria-pressed=true] .today-mark,.calendar-day[aria-pressed=true] .day-count,.calendar-day[aria-pressed=true] .day-preview{color:#fff}
+.calendar-day:focus-visible{outline:3px solid #9a5c40;outline-offset:1px;z-index:1}
+.selected-day-heading{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}
+.selected-day-heading h2{font-size:1.1rem}.selected-day-heading span{font-size:.8rem;color:var(--muted)}
+#calendarEvents{margin:12px 0 18px}.event-card{margin:12px 0;padding:18px 22px}.event-manage summary{min-height:44px;font-size:.75rem;padding:8px 0 0}.event-manage .actions{margin-top:6px}
+.calendar-bottom{margin-top:26px}.calendar-jump{margin-top:22px}.calendar-jump input{max-width:320px}
+@media(max-width:680px){
+ main{padding-left:16px;padding-right:16px}.site-header{padding-left:16px;padding-right:16px}.site-header nav{width:auto;gap:6px}.site-header{align-items:center}
+ .settings-menu>summary{font-size:.8rem;padding:11px 14px}.nav-button{font-size:.85rem}.settings-panel{width:240px}
+ .today-pill{font-size:.78rem}.welcome h1{font-size:1.8rem}.welcome .lead{font-size:.87rem}.start-main{min-height:88px}
+ .month-toolbar{gap:6px;margin-top:22px}.month-toolbar h2{font-size:1.05rem;white-space:nowrap}.month-toolbar button{padding:8px;font-size:.74rem;min-height:52px}
+ .month-calendar{border-spacing:2px}.month-calendar th{font-size:.75rem}.calendar-day{padding:8px 2px;min-height:84px;border-radius:9px;gap:2px}
+ .calendar-day .day-number{font-size:1rem}.calendar-day .day-count{font-size:.57rem}.calendar-day .day-preview{display:none}.calendar-day .today-mark{font-size:.52rem}
+ .calendar-legend{font-size:.68rem}.selected-day-heading h2{font-size:.95rem}.event-card{padding:16px}.event-card h2{font-size:1.1rem}
+ .large-type .month-toolbar h2{font-size:.95rem}.large-type .month-toolbar button{font-size:.65rem}.large-type .calendar-day{min-height:96px}.large-type .calendar-day .day-count{font-size:.52rem}
+}
+
+.home-topline #todayLabel{display:none}.home-topline{justify-content:flex-end;margin-bottom:14px}.home-grid .start-choices{margin-top:22px}
+@media(max-width:680px){.welcome>.eyebrow{display:none}.welcome .lead{margin-top:10px}.today-pill{margin-top:16px}.calendar-day{min-height:76px}.large-type .calendar-day{min-height:88px}}
 </style>
 </head>
 <body>
 <a class="skip-link" href="#main">본문으로 바로가기</a>
 <header class="site-header">
   <button id="homeButton" class="brand" aria-label="기억잇다 첫 화면"><span class="brand-mark" aria-hidden="true">✿</span><span>기억잇다<small>오늘을 담는 작은 일기장</small></span></button>
-  <nav aria-label="화면과 글씨 설정"><button id="fontButton" class="quiet" aria-pressed="false">가<span class="font-label"> 글씨 크게</span></button><button id="calendarButton" class="nav-button">캘린더</button><button id="historyButton" class="nav-button">내 일기</button></nav>
+  <nav aria-label="화면과 글씨 설정"><button id="calendarButton" class="nav-button">달력</button><button id="historyButton" class="nav-button">내 일기</button><details id="settingsMenu" class="settings-menu"><summary>설정</summary><div class="settings-panel"><button id="fontButton" class="secondary" aria-pressed="false">가<span class="font-label"> 글씨 크게</span></button><p class="helper">글씨 크기는 다음에도 유지돼요.</p></div></details></nav>
 </header>
 <main id="main" tabindex="-1">
-  <div class="topline"><span id="todayLabel"></span><span id="mode" class="mode-badge">연결 확인 중</span></div>
+  <div class="topline home-topline"><span id="todayLabel"></span><span id="mode" class="mode-badge">연결 확인 중</span></div>
   <ol id="steps" class="steps" aria-label="일기 만드는 순서" hidden><li>오늘 이야기</li><li>내일 일정</li><li>일기 확인</li><li>저장하기</li></ol>
   <div id="workspace">
     <section id="home" class="screen" aria-labelledby="homeTitle">
-      <div class="home-grid"><div class="welcome"><p class="eyebrow">나의 하루, 나의 이야기</p><h1 id="homeTitle" tabindex="-1">오늘은 어떤<br>하루를 보내셨나요?</h1><p class="lead">특별한 일이 없어도 좋아요.<br>나눈 이야기를 한 장의 그림일기로 남겨드릴게요.</p>
-      <details class="date-choice"><summary>다른 날의 일기를 쓰고 싶어요</summary><label for="date">기록할 날짜</label><input id="date" type="date"></details>
-      <div id="resumeCard" class="resume-card" hidden><div><strong>쓰던 이야기가 있어요</strong><p id="resumeDescription"></p></div><button id="resumeDraft" class="primary">이어서 쓰기 <span aria-hidden="true">→</span></button></div>
-      <div id="homeSchedule" class="schedule-summary"><strong>오늘의 일정</strong><p id="homeScheduleText">캘린더에서 일정을 적어두면 이야기의 시작을 도와드려요.</p><button id="homeCalendar" class="text-button">캘린더 보기</button></div><div class="start-choices"><button id="startPhotos" class="choice"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></svg></span><span><strong>사진 보며 이야기하기</strong><small>오늘의 사진을 함께 볼까요?</small></span><span aria-hidden="true">→</span></button><button id="startTalk" class="choice"><span class="choice-icon talk-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 11a8 8 0 0 1-8 8H8l-5 3v-6a8 8 0 0 1 2-13h8a8 8 0 0 1 8 8Z"/><path d="M8 9h8M8 13h5"/></svg></span><span><strong>사진 없이 이야기하기</strong><small>기억나는 일부터 편하게 들려주세요</small></span><span aria-hidden="true">→</span></button></div>
+      <div class="home-grid"><div class="welcome"><p class="eyebrow">나의 하루, 나의 이야기</p><h1 id="homeTitle" tabindex="-1">오늘 이야기<br>나눠볼까요?</h1><p class="lead">짧은 이야기로 오늘의 그림일기를 남겨요.</p>
+      <p id="homeDate" class="today-pill"></p>
+      <div class="start-choices"><button id="startTalk" class="choice start-main"><span class="choice-icon talk-icon" aria-hidden="true">✿</span><span><strong>오늘 이야기 시작하기</strong><small>사진 없이, 편하게 들려주세요</small></span><span aria-hidden="true">→</span></button><button id="startPhotos" class="choice start-photo"><span aria-hidden="true">＋</span><span><strong>사진과 함께 시작할래요</strong></span></button></div>
+      <div id="resumeCard" class="resume-card" hidden><div><strong id="resumeTitle">쓰던 이야기가 있어요</strong><p id="resumeDescription"></p></div><button id="resumeDraft" class="secondary">쓰던 이야기 이어쓰기 <span aria-hidden="true">→</span></button></div>
+
+      <div id="homeSchedule" class="schedule-summary"><strong>오늘의 일정</strong><p id="homeScheduleText"></p></div>
+      <details id="otherDateOptions" class="date-choice quiet-options"><summary>다른 날의 일기도 쓸 수 있어요</summary><label for="date">기록할 날짜</label><input id="date" type="date"><div class="actions"><button id="startOtherTalk" class="secondary">이 날짜로 이야기하기</button><button id="startOtherPhotos" class="text-button">사진과 함께 쓰기</button></div></details>
       <p class="reassurance"><span aria-hidden="true">✓</span> 언제든 쉬거나, 나중에 이어 쓸 수 있어요.</p></div>
       <aside class="diary-cover" aria-label="그림일기 소개"><div class="cover-rings" aria-hidden="true"></div><p class="cover-caption">MY LITTLE MOMENTS</p><h2>소중한 하루를<br>오래 간직하도록.</h2><svg viewBox="0 0 360 270" role="img" aria-label="나무와 꽃이 있는 공원 벤치의 안내용 일러스트"><ellipse cx="180" cy="241" rx="145" ry="15" fill="#dce2ce"/><path d="M63 225Q34 165 71 126Q90 88 119 124Q155 137 128 185L114 225" fill="#c5d1ac"/><path d="M94 225V152M94 189L70 171M94 172L112 153" stroke="#697b58" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M270 226V98" stroke="#8b7759" stroke-width="10" stroke-linecap="round"/><path d="M271 130L236 108M270 159L303 137" stroke="#8b7759" stroke-width="7" stroke-linecap="round"/><circle cx="245" cy="93" r="38" fill="#b7c7a0"/><circle cx="285" cy="77" r="45" fill="#cbd6b4"/><circle cx="310" cy="111" r="34" fill="#b9c9a3"/><path d="M136 171H235M136 187H235" stroke="#b78864" stroke-width="12" stroke-linecap="round"/><path d="M130 203H242" stroke="#a77755" stroke-width="13" stroke-linecap="round"/><path d="M143 208V235M228 208V235" stroke="#6b6958" stroke-width="7" stroke-linecap="round"/><circle cx="160" cy="88" r="23" fill="#eecb81"/><path d="M43 240V219M54 241V228M320 238V216" stroke="#839a6b" stroke-width="3"/><g fill="#cf8b79"><circle cx="43" cy="216" r="6"/><circle cx="54" cy="225" r="5"/><circle cx="320" cy="214" r="6"/></g><path d="M156 127Q164 118 172 127M173 119Q181 110 189 119" stroke="#8b957d" stroke-width="2" fill="none" stroke-linecap="round"/></svg><p class="cover-bottom">한 번의 대화가<br>나만의 그림일기가 됩니다.</p><small>서비스 소개를 위한 그림이에요.</small></aside></div>
     </section>
@@ -38,7 +89,7 @@
     </section>
     <section id="conversation" class="screen narrow" aria-labelledby="conversationTitle" hidden>
       <div class="section-heading"><div><p class="eyebrow">서두르지 않아도 괜찮아요</p><h1 id="conversationTitle" tabindex="-1">당신의 이야기를 들려주세요</h1></div><button id="pause" class="secondary compact">잠시 쉬기</button></div>
-      <p id="scheduleContext" class="helper" hidden></p><div id="conversationPhotos" class="photo-strip" aria-label="선택한 사진"></div>
+      <p id="writingDate" class="writing-date"></p><p id="scheduleContext" class="helper" hidden></p><div id="conversationPhotos" class="photo-strip" aria-label="선택한 사진"></div>
       <div class="question-card"><span class="companion-label"><span aria-hidden="true">✿</span> 기억잇다</span><h2 id="question"></h2><button id="readQuestion" class="quiet">질문 읽어주기</button></div>
       <label for="answer">나의 이야기</label><textarea id="answer" rows="3" maxlength="2000" placeholder="짧게 말씀해도 좋아요."></textarea>
       <div class="input-tools"><button id="microphone" class="secondary compact" aria-pressed="false">마이크로 말하기</button><span id="speechHint" class="helper">직접 입력해도 좋아요.</span></div>
@@ -50,10 +101,10 @@
     <section id="tomorrow" class="screen narrow" aria-labelledby="tomorrowTitle" hidden>
       <p class="eyebrow">오늘을 듣고, 내일을 챙겨요</p><h1 id="tomorrowTitle" tabindex="-1">내일 하실 일이 있으세요?</h1><p id="tomorrowDate" class="lead"></p>
       <p class="helper">내일 계획은 오늘 일기에 들어가지 않아요. 일정은 확인하신 뒤에만 등록해요.</p>
-      <div id="planInputPanel"><label for="tomorrowAnswer">내일의 할 일</label><textarea id="tomorrowAnswer" rows="3" maxlength="2000" placeholder="예: 내일 오후 3시에 치과에 가요."></textarea><p class="helper">여러 일정은 줄을 나누어 적어주세요. 아직 정하지 않았다면 건너뛰어도 괜찮아요.</p><div class="actions"><button id="extractPlans" class="primary">일정 확인하기</button><button id="manualPlan" class="secondary">직접 일정 적기</button></div></div>
+      <div id="planInputPanel"><label for="tomorrowAnswer">내일의 할 일</label><textarea id="tomorrowAnswer" rows="3" maxlength="2000" placeholder="예: 내일 오후 3시에 치과에 가요."></textarea><p class="helper">여러 일정은 줄을 나누어 적어주세요. 아직 정하지 않았다면 건너뛰어도 괜찮아요.</p><div class="actions"><button id="extractPlans" class="primary">일정 확인하기</button></div></div>
       <div id="planReviewPanel" hidden><h2 tabindex="-1" id="planReviewHeading">이 일정이 맞나요?</h2><p class="helper">빠진 시간과 장소를 채우거나 고칠 수 있어요. 시간은 비워두어도 괜찮아요.</p><p id="existingPlans" class="inline-note" hidden></p><div id="planCards"></div><div class="actions"><button id="confirmPlans" class="primary">맞아요, 등록하고 일기 만들기</button><button id="revisePlans" class="secondary">다시 말할게요</button></div></div>
       <p id="planSavedNote" class="inline-note" hidden>확인한 일정을 캘린더에 저장했어요. 이제 오늘 이야기로 일기를 만들어요.</p>
-      <div class="actions"><button id="skipPlans" class="text-button">일정 등록 없이 일기 만들기</button><button id="tomorrowBack" class="text-button">오늘 이야기를 더 할게요</button></div>
+      <div class="actions"><button id="skipPlans" class="text-button">일정 등록 없이 일기 만들기</button></div><details id="tomorrowOptions" class="quiet-options"><summary>다른 방법으로 진행하기</summary><div class="actions"><button id="manualPlan" class="secondary">직접 일정 적기</button><button id="tomorrowBack" class="text-button">오늘 이야기를 더 할게요</button></div></details>
     </section>
     <section id="review" class="screen narrow" aria-labelledby="reviewTitle" hidden>
       <p class="eyebrow">함께 만든 오늘의 기록</p><h1 id="reviewTitle" tabindex="-1">이렇게 남겨볼까요?</h1><p id="draftNote" class="lead">내 이야기와 맞는지 편하게 읽어보세요.</p>
@@ -61,16 +112,23 @@
       <button id="editToggle" class="secondary" aria-expanded="false" aria-controls="editPanel">조금 고칠게요</button>
       <div id="editPanel" class="edit-panel" hidden><label for="title">제목</label><input id="title" maxlength="200"><label for="body">오늘의 이야기</label><textarea id="body" rows="5" maxlength="8000"></textarea><details><summary>그림 장면도 수정하기</summary><label for="scene">그림으로 남길 장면</label><textarea id="scene" rows="3" maxlength="3000"></textarea></details><button id="applyEdits" class="primary">수정한 내용 확인하기</button></div>
       <p id="imageNotice" class="inline-note" hidden></p>
-      <div class="actions"><button id="draw" class="primary">맞아요, 그림으로 남겨주세요 <span aria-hidden="true">→</span></button><button id="saveText" class="secondary">오늘은 글로만 저장할게요</button></div><p class="helper">그림을 만들 때 API 비용이 발생해요. 생성이 어려워도 글은 저장할 수 있어요.</p><button id="backToTalk" class="text-button">대화를 더 나눌게요</button><br><button id="exportReview" class="text-button">현재 글을 파일로 보관하기</button>
+      <div class="actions"><button id="draw" class="primary">맞아요, 그림으로 남겨주세요 <span aria-hidden="true">→</span></button><button id="saveText" class="secondary">오늘은 글로만 저장할게요</button></div><p class="helper">그림을 만들 때 API 비용이 발생해요. 생성이 어려워도 글은 저장할 수 있어요.</p><details class="quiet-options"><summary>대화 더 하기 · 파일로 보관하기</summary><div class="actions"><button id="backToTalk" class="secondary">대화를 더 나눌게요</button><button id="exportReview" class="text-button">현재 글을 파일로 보관하기</button></div></details>
     </section>
     <section id="result" class="screen narrow" aria-labelledby="resultTitle" hidden><p class="eyebrow">이야기가 한 장의 그림으로</p><h1 id="resultTitle" tabindex="-1">오늘의 그림일기가 완성됐어요</h1><article class="paper"><p id="resultDate" class="paper-date"></p><h2 id="resultHeading"></h2><figure><img id="illustration" alt="오늘 이야기로 AI가 그린 삽화"><figcaption>AI로 그린 그림 · 실제 사진이 아니에요.</figcaption></figure><p id="resultBody" class="diary-body"></p></article><div class="actions"><button id="save" class="primary">내 일기장에 저장하기</button><button id="resultEdit" class="secondary">글을 조금 고칠게요</button></div><details class="disclosure"><summary>그림이 마음에 들지 않나요?</summary><p>그림은 기억 속 모습과 다를 수 있어요. 다시 그리면 추가 비용이 발생해요.</p><button id="redraw" class="secondary">다른 그림으로 다시 그리기</button></details><button id="exportResult" class="text-button">파일로도 보관하기</button></section>
     <section id="done" class="screen narrow rest-card" aria-labelledby="doneTitle" hidden><div class="saved-mark" aria-hidden="true">✓</div><p class="eyebrow">나만의 일기장에 차곡차곡</p><h1 id="doneTitle" tabindex="-1">오늘의 이야기를 간직했어요</h1><p id="doneDescription" class="lead"></p><div class="actions centered"><button id="doneHistory" class="primary">저장한 일기 보기</button><button id="doneHome" class="secondary">처음으로</button></div></section>
-    <section id="calendar" class="screen narrow" aria-labelledby="calendarTitle" hidden>
-      <p class="eyebrow">함께 챙기는 하루</p><h1 id="calendarTitle" tabindex="-1">나의 캘린더</h1><p class="lead">적어둔 일정으로 이야기를 시작할 수 있어요.</p><p class="helper">이 브라우저에 저장해요. 휴대폰 달력 동기화나 알림 전송 기능은 아직 없어요.</p>
-      <label for="calendarDate">보고 싶은 날짜</label><input id="calendarDate" type="date"><div class="actions date-navigation"><button id="calendarPrev" class="secondary">이전 날</button><button id="calendarToday" class="secondary">오늘</button><button id="calendarNext" class="secondary">다음 날</button></div>
-      <div id="calendarEvents" class="event-list" aria-live="polite"></div><button id="addCalendarEvent" class="primary">＋ 일정 적기</button>
-      <form id="eventForm" class="edit-panel" hidden><h2 id="eventFormHeading">일정 적기</h2><label for="eventTitle">할 일</label><input id="eventTitle" maxlength="100" required><label for="eventDate">날짜</label><input id="eventDate" type="date" required><label for="eventTime">시간 (선택)</label><input id="eventTime" type="time"><label for="eventLocation">장소 (선택)</label><input id="eventLocation" maxlength="200"><div class="actions"><button type="submit" class="primary">이 일정 저장하기</button><button type="button" id="cancelEvent" class="secondary">돌아가기</button></div></form>
-      <div class="actions"><button id="calendarReturn" class="secondary">쓰던 화면으로 돌아가기</button><button id="calendarTalk" class="text-button">이 날짜의 이야기 시작하기</button></div>
+    <section id="calendar" class="screen calendar-screen" aria-labelledby="calendarTitle" hidden>
+      <p class="eyebrow">한눈에 챙기는 나의 하루</p><h1 id="calendarTitle" tabindex="-1">나의 달력</h1><p class="lead">일정이 있는 날을 눌러보세요.</p>
+      <div id="calendarOverview">
+        <div class="month-toolbar"><button id="calendarPrev" class="secondary" aria-label="이전 달">← 이전 달</button><h2 id="calendarMonth" aria-live="polite"></h2><button id="calendarNext" class="secondary" aria-label="다음 달">다음 달 →</button></div>
+        <div class="calendar-legend"><span>● 일정이 있는 날</span><button id="calendarToday" class="quiet">오늘로</button></div>
+        <table class="month-calendar" aria-labelledby="calendarMonth"><thead><tr><th scope="col">일</th><th scope="col">월</th><th scope="col">화</th><th scope="col">수</th><th scope="col">목</th><th scope="col">금</th><th scope="col">토</th></tr></thead><tbody id="calendarGrid"></tbody></table>
+        <div class="selected-day-heading"><h2 id="calendarSelectedDate" tabindex="-1"></h2><span id="calendarCount"></span></div>
+        <div id="calendarEvents" class="event-list" aria-live="polite"></div><button id="addCalendarEvent" class="primary">＋ 이 날에 일정 적기</button>
+        <details class="quiet-options calendar-jump"><summary>날짜로 바로 찾기</summary><label for="calendarDate">보고 싶은 날짜</label><input id="calendarDate" type="date"></details>
+      </div>
+      <form id="eventForm" class="edit-panel" hidden><h2 id="eventFormHeading">일정 적기</h2><label for="eventTitle">할 일</label><input id="eventTitle" maxlength="100" required><label for="eventDate">날짜</label><input id="eventDate" type="date" required><label for="eventTime">시간 (선택)</label><input id="eventTime" type="time"><label for="eventLocation">장소 (선택)</label><input id="eventLocation" maxlength="200"><div class="actions"><button type="submit" class="primary">이 일정 저장하기</button><button type="button" id="cancelEvent" class="secondary">달력으로 돌아가기</button></div></form>
+      <div class="actions calendar-bottom"><button id="calendarReturn" class="secondary">돌아가기</button></div>
+      <p class="helper">일정은 이 브라우저에 저장돼요. 휴대폰 달력 연동과 알림은 아직 제공하지 않아요.</p>
     </section>
     <section id="history" class="screen" aria-labelledby="historyTitle" hidden><p class="eyebrow">다시 펼쳐보는 나의 하루</p><h1 id="historyTitle" tabindex="-1">나의 일기장</h1><p class="lead">소중한 이야기를 천천히 다시 만나보세요.</p><div id="diaries" class="diary-grid"></div><button id="historyReturn" class="secondary">작성 화면으로 돌아가기</button></section>
     <section id="detail" class="screen narrow" aria-labelledby="detailTitle" hidden><button id="detailBack" class="back-button">← 나의 일기장</button><article id="detailCard" class="paper"></article><div class="actions"><button id="readSaved" class="primary">일기 읽어주기</button><button id="exportSaved" class="secondary">파일로 보관하기</button></div><button id="deleteSaved" class="text-button danger">이 일기 삭제하기</button></section>
@@ -90,6 +148,22 @@ function nextDate(value,days=1){
  if(!validDate(value))throw new Error('날짜를 확인해 주세요.');
  const date=new Date(`${value}T12:00:00`);date.setDate(date.getDate()+days);
  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function shiftMonth(value,offset){
+ if(!validDate(value))throw new Error('날짜를 확인해 주세요.');
+ const date=new Date(`${value}T12:00:00`),day=date.getDate();
+ date.setDate(1);date.setMonth(date.getMonth()+offset);
+ const last=new Date(date.getFullYear(),date.getMonth()+1,0,12).getDate();date.setDate(Math.min(day,last));
+ return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function monthDays(value){
+ if(!validDate(value))throw new Error('날짜를 확인해 주세요.');
+ const first=value.slice(0,8)+'01',date=new Date(`${first}T12:00:00`);
+ const count=new Date(date.getFullYear(),date.getMonth()+1,0,12).getDate();
+ const days=Array(date.getDay()).fill(null);
+ for(let i=0;i<count;i++)days.push(nextDate(first,i));
+ while(days.length%7)days.push(null);
+ return days;
 }
 function calendarEvent(value){
  if(!value||typeof value.title!=='string'||!value.title.trim()||value.title.length>100||!validDate(value.date)||typeof value.time!=='string'||(value.time!==''&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(value.time))||typeof value.location!=='string'||value.location.length>200)throw new Error('일정의 이름, 날짜, 시간과 장소를 확인해 주세요.');
@@ -239,7 +313,7 @@ const writing=new Set(['photos','conversation','rest','tomorrow','review','resul
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
 let calendarReturn='home',editingEventId=null;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
-$('todayLabel').textContent=readableDate(localDate());$('date').value=localDate();
+resetHomeDate();
 function notify(message,error=false,detail=''){
  $('feedback').hidden=!message;$('feedback').classList.toggle('error',error);$('status').textContent=message;
  $('errorDetails').hidden=!detail;$('errorDetails').open=false;$('errorText').textContent=detail;
@@ -247,16 +321,19 @@ function notify(message,error=false,detail=''){
 }
 function stopVoice(){try{recognition?.stop();}catch{}window.speechSynthesis?.cancel();}
 function view(screen,{focus=true}={}){
- stopVoice();active=screen;for(const name of screens)$(name).hidden=name!==screen;
+ stopVoice();active=screen;document.querySelector('.topline').classList.toggle('home-topline',screen==='home');for(const name of screens)$(name).hidden=name!==screen;
  if(state&&writing.has(screen)){state.stage=screen;scheduleSave();}
  const step=['conversation','photos','rest'].includes(screen)?0:screen==='tomorrow'?1:screen==='review'?2:['result','done'].includes(screen)?3:-1;
  $('steps').hidden=step<0;[...$('steps').children].forEach((li,i)=>{if(i===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');});
  $('calendarButton').setAttribute('aria-current',screen==='calendar'?'page':'false');
- if(screen==='home'){renderResume();refreshHomeSchedule();}
+ $('historyButton').setAttribute('aria-current',['history','detail'].includes(screen)?'page':'false');
+ if(screen==='home'){resetHomeDate();renderResume();refreshHomeSchedule();}
+ $('settingsMenu').open=false;
  if(focus){const heading=$(screen).querySelector('h1,h2');requestAnimationFrame(()=>{heading?.focus({preventScroll:true});$('main').scrollIntoView({block:'start',behavior:'instant'});});}
 }
 function renderResume(){
  const draft=state||savedDraft;$('resumeCard').hidden=!draft;
+ if(draft){$('resumeTitle').textContent=draft.date===localDate()?'오늘 쓰던 이야기가 있어요':`${readableDate(draft.date)}에 쓰던 이야기`; $('resumeDraft').textContent='쓰던 이야기 이어쓰기';}
  if(draft)$('resumeDescription').textContent=`${readableDate(draft.date)} · ${draft.draft?.title||draft.turns.find(t=>t.answer)?.answer?.slice(0,48)||'사진과 이야기가 기다리고 있어요.'}`;
 }
 function snapshot(){if(!state)return null;state.updatedAt=new Date().toISOString();return structuredClone(state);}
@@ -291,18 +368,19 @@ function read(text){
 try{if(localStorage.getItem('memory-diary-large-type')==='true'){document.documentElement.classList.add('large-type');$('fontButton').setAttribute('aria-pressed','true');$('fontButton').innerHTML='가<span class="font-label"> 기본 글씨</span>';}}catch{}
 $('fontButton').onclick=()=>{const large=document.documentElement.classList.toggle('large-type');$('fontButton').setAttribute('aria-pressed',String(large));$('fontButton').innerHTML=large?'가<span class="font-label"> 기본 글씨</span>':'가<span class="font-label"> 글씨 크게</span>';try{localStorage.setItem('memory-diary-large-type',String(large));}catch{}};
 $('homeButton').onclick=()=>{notify('');view('home');};$('photosBack').onclick=()=>view('home');$('restHome').onclick=()=>view('home');$('doneHome').onclick=()=>view('home');
-async function start(withPhotos){
+async function start(withPhotos,{date=localDate()}={}){
  if(busy)return;
  if((state||savedDraft)&&!await ask('새 이야기를 시작할까요?','쓰던 이야기는 새 이야기로 바뀌어요. 계속 쓰려면 돌아가기를 눌러주세요.','새로 시작하기'))return;
- if(!$('date').value){notify('기록할 날짜를 선택해 주세요.',true);$('date').focus();return;}
+ if(!validDate(date)){notify('기록할 날짜를 선택해 주세요.',true);$('date').focus();return;}
  let events;try{events=await listEvents();}catch{notify('캘린더를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.',true);return;}
  if(state||savedDraft){try{await clearWorking();}catch{notify('쓰던 이야기를 정리하지 못했어요. 다시 시도해 주세요.',true);return;}}
- state=newSession($('date').value);state.todayEvents=events.filter(e=>e.date===state.date).sort(eventOrder).slice(0,20);notify('');
+ state=newSession(date);state.todayEvents=events.filter(e=>e.date===state.date).sort(eventOrder).slice(0,20);notify('');
  if(withPhotos){renderPhotos();view('photos');await persist();}else{state.stage='conversation';view('conversation');paintConversation();await initialQuestion();}
 }
 $('startPhotos').onclick=()=>start(true);$('startTalk').onclick=()=>start(false);
+$('startOtherTalk').onclick=()=>start(false,{date:$('date').value});$('startOtherPhotos').onclick=()=>start(true,{date:$('date').value});
 async function initialQuestion(){await task(async()=>{const response=await api('question',sessionInput([]));state.question=response.question;state.answer='';paintConversation();view('conversation');await persist();},'첫 이야기를 준비하고 있어요…');}
-$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);state={...newSession(state.date),...state};if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');$('date').value=state.date;renderPhotos();paintConversation();if(state.stage==='tomorrow')paintTomorrow();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
+$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);state={...newSession(state.date),...state};if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');renderPhotos();paintConversation();if(state.stage==='tomorrow')paintTomorrow();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
 async function resize(file){const bitmap=await createImageBitmap(file);try{const scale=Math.min(1,900/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.7);}finally{bitmap.close();}}
 function renderPhotos(){
  $('photoCount').textContent=state?.photos.length?`${state.photos.length}장을 골랐어요. 더 골라도 좋아요. (최대 5장)`:'JPG · PNG · WebP / 한 장당 8MB 이하';$('photoGrid').replaceChildren();$('conversationPhotos').replaceChildren();
@@ -320,6 +398,7 @@ $('photoFiles').onchange=()=>{const files=[...$('photoFiles').files];task(async(
 $('beginPhotos').onclick=()=>{if(!state.photos.length){notify('사진을 고르거나 ‘사진 없이 시작할게요’를 눌러주세요.',true);return;}initialQuestion();};
 $('withoutPhotos').onclick=()=>{state.photos=[];renderPhotos();initialQuestion();};
 function paintConversation(){
+ $('writingDate').textContent=state?`${state.date===localDate()?'오늘 · ':''}${readableDate(state.date)}의 이야기`:'';
  $('scheduleContext').hidden=!state?.todayEvents?.length;if(state?.todayEvents?.length)$('scheduleContext').textContent=`${readableDate(state.date)}의 예정된 일정을 참고하고 있어요. 실제 경험이 다르면 편하게 알려주세요.`;
  $('question').textContent=state?.question||'첫 이야기를 준비하고 있어요.';$('answer').value=state?.answer||'';$('transcript').replaceChildren();
  for(const turn of state?.turns||[]){const p=document.createElement('p');p.textContent=`기억잇다: ${turn.question}\n나: ${turn.answer||'(이 질문은 쉬어갔어요)'}`;$('transcript').append(p);}renderPhotos();
@@ -413,12 +492,13 @@ window.addEventListener('pagehide',()=>persist());
 
 function eventOrder(a,b){return (a.time||'99:99').localeCompare(b.time||'99:99')||a.title.localeCompare(b.title);}
 async function refreshHomeSchedule(){
- try{const date=$('date').value||localDate(),events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);
+ try{const date=localDate(),events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);
+ $('homeSchedule').hidden=!events.length;
  $('homeSchedule').querySelector('strong').textContent=`${date===localDate()?'오늘':readableDate(date)}의 일정`;
  $('homeScheduleText').textContent=events.length?events.map(e=>`${e.time||'시간 미정'} · ${e.title}`).join('\n'):'아직 적어둔 일정이 없어요. 일정이 없어도 편하게 이야기할 수 있어요.';
  }catch{$('homeScheduleText').textContent='이 브라우저에서 캘린더를 읽지 못했어요.';}
 }
-$('date').onchange=refreshHomeSchedule;
+
 async function finishToday(turns){
  if(!experienceTurns(turns).some(t=>t.answer.trim()))throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요. 내일 일정은 다음 단계에서 따로 챙길게요.');
  state.turns=turns;state.answer='';
@@ -467,32 +547,75 @@ function backToToday(){const last=state.turns.pop();if(last){state.question=last
 $('tomorrowBack').onclick=backToToday;
 async function showCalendar(){
  const from=active;if(from!=='calendar')calendarReturn=from;
- await task(async()=>{if(state)await persist();$('calendarDate').value=state?.date||$('date').value||localDate();$('eventForm').hidden=true;await renderCalendar();view('calendar');},'캘린더를 펼치고 있어요…');
+ await task(async()=>{if(state)await persist();$('calendarDate').value=localDate();$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();view('calendar');},'캘린더를 펼치고 있어요…');
 }
 async function renderCalendar(){
  const date=$('calendarDate').value;if(!validDate(date))throw new Error('날짜를 선택해 주세요.');
- const events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);$('calendarEvents').replaceChildren();
+ const all=await listEvents(),events=all.filter(e=>e.date===date).sort(eventOrder);
+ paintMonth(date,all);$('calendarSelectedDate').textContent=`${date===localDate()?'오늘 · ':''}${readableDate(date)}`;$('calendarCount').textContent=events.length?`일정 ${events.length}개`:'';
+ $('calendarEvents').replaceChildren();
  if(!events.length){const p=document.createElement('p');p.className='empty-state';p.textContent='아직 적어둔 일정이 없어요. 아래에서 새 일정을 적을 수 있어요.';$('calendarEvents').append(p);}
  for(const event of events){
   const card=document.createElement('article');card.className='event-card';const h=document.createElement('h2');h.textContent=event.title;const p=document.createElement('p');p.textContent=`${event.time||'시간 미정'}${event.location?' · '+event.location:''}`;
+  const manage=document.createElement('details');manage.className='event-manage';const summary=document.createElement('summary');summary.textContent='고치기 · 삭제';manage.append(summary);
   const actions=document.createElement('div');actions.className='actions';const edit=document.createElement('button');edit.className='secondary';edit.textContent='일정 고치기';edit.onclick=()=>editEvent(event);
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='일정 삭제';remove.onclick=async()=>{if(!await ask('이 일정을 지울까요?',`${event.title} 일정을 캘린더에서 삭제해요.`,'일정 삭제'))return;await task(async()=>{await removeEvent(event.id);await renderCalendar();await refreshHomeSchedule();},'일정을 정리하고 있어요…');};
-  actions.append(edit,remove);card.append(h,p,actions);$('calendarEvents').append(card);
+  actions.append(edit,remove);manage.append(actions);card.append(h,p,manage);$('calendarEvents').append(card);
  }
 }
 function editEvent(event=null){
- editingEventId=event?.id||crypto.randomUUID();$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
+ editingEventId=event?.id||crypto.randomUUID();$('calendarOverview').hidden=true;$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
  for(const [id,key] of [['eventTitle','title'],['eventDate','date'],['eventTime','time'],['eventLocation','location']])$(id).value=event?.[key]||(key==='date'?$('calendarDate').value:'');
  $('eventTitle').focus();
 }
-$('calendarButton').onclick=showCalendar;$('homeCalendar').onclick=showCalendar;
-$('calendarDate').onchange=()=>task(renderCalendar,'일정을 살펴보고 있어요…');
-for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?nextDate($('calendarDate').value,days):localDate();$('eventForm').hidden=true;await renderCalendar();},'일정을 살펴보고 있어요…');
-$('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;};
+$('calendarButton').onclick=showCalendar;
+$('calendarDate').onchange=()=>selectCalendarDate($('calendarDate').value);
+for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?shiftMonth($('calendarDate').value,days):localDate();$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();},'일정을 살펴보고 있어요…');
+$('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;$('calendarOverview').hidden=false;$('addCalendarEvent').focus();};
 $('eventForm').onsubmit=event=>{event.preventDefault();task(async()=>{
  const data=calendarEvent({title:$('eventTitle').value,date:$('eventDate').value,time:$('eventTime').value,location:$('eventLocation').value});
- await putEvent({...data,id:editingEventId,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;await renderCalendar();await refreshHomeSchedule();
+ await putEvent({...data,id:editingEventId,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();await refreshHomeSchedule();
 },'일정을 저장하고 있어요…');};
 $('calendarReturn').onclick=()=>{notify('');view(calendarReturn);};
-$('calendarTalk').onclick=()=>{$('date').value=$('calendarDate').value;start(false);};
+
+function resetHomeDate(){
+ const today=localDate();$('date').value=today;$('homeDate').dataset.date=today;$('todayLabel').textContent=readableDate(today);$('homeDate').textContent=`${readableDate(today)} · 오늘의 일기`;$('otherDateOptions').open=false;
+}
+function paintMonth(selected,events){
+ const [year,month]=selected.split('-');$('calendarMonth').textContent=`${year}년 ${Number(month)}월`;
+ const byDate=new Map();for(const event of [...events].sort(eventOrder)){if(!byDate.has(event.date))byDate.set(event.date,[]);byDate.get(event.date).push(event);}
+ const days=monthDays(selected);$('calendarGrid').replaceChildren();
+ for(let week=0;week<days.length;week+=7){
+  const row=document.createElement('tr');
+  for(const date of days.slice(week,week+7)){
+   const cell=document.createElement('td');if(!date){cell.className='empty-day';row.append(cell);continue;}
+   const items=byDate.get(date)||[],today=date===localDate(),button=document.createElement('button');button.className='calendar-day';button.dataset.date=date;button.tabIndex=date===selected?0:-1;
+   button.setAttribute('aria-pressed',String(date===selected));if(today)button.setAttribute('aria-current','date');
+   button.setAttribute('aria-label',`${readableDate(date)}${today?' 오늘':''}, ${items.length?`일정 ${items.length}개: ${items.map(e=>`${e.time||'시간 미정'} ${e.title}`).join(', ')}`:'일정 없음'}`);
+   const number=document.createElement('span');number.className='day-number';number.textContent=String(Number(date.slice(-2)));button.append(number);
+   if(today){const mark=document.createElement('span');mark.className='today-mark';mark.textContent='오늘';button.append(mark);}
+   if(items.length){const count=document.createElement('span');count.className='day-count';count.textContent=`● ${items.length}개`;const preview=document.createElement('span');preview.className='day-preview';preview.textContent=items[0].title;button.append(count,preview);}
+   button.onclick=()=>selectCalendarDate(date);button.onkeydown=event=>{
+    const step={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];let target;
+    if(step!==undefined)target=nextDate(date,step);
+    else if(event.key==='Home')target=nextDate(date,-new Date(`${date}T12:00:00`).getDay());
+    else if(event.key==='End')target=nextDate(date,6-new Date(`${date}T12:00:00`).getDay());
+    else if(event.key==='PageUp'||event.key==='PageDown')target=shiftMonth(date,event.key==='PageUp'?-1:1);
+    if(target){event.preventDefault();selectCalendarDate(target,{focus:true});}
+   };
+   cell.append(button);row.append(cell);
+  }
+  $('calendarGrid').append(row);
+ }
+}
+async function selectCalendarDate(date,{focus=false}={}){
+ if(busy)return;
+ await task(async()=>{if(!validDate(date))throw new Error('날짜를 확인해 주세요.');$('calendarDate').value=date;await renderCalendar();},'이 날의 일정을 살펴보고 있어요…');
+ if(focus)document.querySelector(`.calendar-day[data-date="${date}"]`)?.focus();
+}
+function refreshToday(){if(active==='home'&&$('homeDate').dataset.date!==localDate()){resetHomeDate();refreshHomeSchedule();}else $('todayLabel').textContent=readableDate(localDate());}
+window.addEventListener('focus',refreshToday);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshToday();});
+
+document.addEventListener('click',event=>{if(!$('settingsMenu').contains(event.target))$('settingsMenu').open=false;});
+$('settingsMenu').addEventListener('keydown',event=>{if(event.key==='Escape'){$('settingsMenu').open=false;$('settingsMenu').querySelector('summary').focus();}});
 </script></body></html>

@@ -9,6 +9,22 @@ export function nextDate(value,days=1){
  const date=new Date(`${value}T12:00:00`);date.setDate(date.getDate()+days);
  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
+export function shiftMonth(value,offset){
+ if(!validDate(value))throw new Error('날짜를 확인해 주세요.');
+ const date=new Date(`${value}T12:00:00`),day=date.getDate();
+ date.setDate(1);date.setMonth(date.getMonth()+offset);
+ const last=new Date(date.getFullYear(),date.getMonth()+1,0,12).getDate();date.setDate(Math.min(day,last));
+ return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+export function monthDays(value){
+ if(!validDate(value))throw new Error('날짜를 확인해 주세요.');
+ const first=value.slice(0,8)+'01',date=new Date(`${first}T12:00:00`);
+ const count=new Date(date.getFullYear(),date.getMonth()+1,0,12).getDate();
+ const days=Array(date.getDay()).fill(null);
+ for(let i=0;i<count;i++)days.push(nextDate(first,i));
+ while(days.length%7)days.push(null);
+ return days;
+}
 export function calendarEvent(value){
  if(!value||typeof value.title!=='string'||!value.title.trim()||value.title.length>100||!validDate(value.date)||typeof value.time!=='string'||(value.time!==''&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(value.time))||typeof value.location!=='string'||value.location.length>200)throw new Error('일정의 이름, 날짜, 시간과 장소를 확인해 주세요.');
  return {title:value.title.trim(),date:value.date,time:value.time,location:value.location.trim()};

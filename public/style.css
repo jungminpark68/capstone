@@ -6,3 +6,51 @@
 @media(max-width:680px){.site-header{flex-wrap:wrap}.site-header nav{width:100%;justify-content:flex-end;flex-wrap:wrap}.steps{gap:10px;font-size:.66rem}.date-navigation button{width:auto;font-size:.82rem}.large-type .steps{flex-wrap:wrap}.plan-card{padding:18px}}
 
 .skip-link:not(:focus){clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}
+
+/* Keep everyday actions prominent; secondary actions are disclosed on demand. */
+.today-pill{display:inline-block;margin-top:22px;padding:7px 15px;border-radius:24px;background:var(--sage);font-size:.85rem;font-weight:700}
+.start-main{background:var(--green);color:white;border-color:var(--green);min-height:100px}
+.start-main:hover{background:var(--green-dark)}
+.start-main small{color:#edf1e8}.start-main .talk-icon{background:#ffffff20;color:white}
+.start-photo{box-shadow:none;justify-content:center;background:transparent;border-color:var(--line);padding:14px;min-height:60px}
+.start-photo span:nth-child(2){flex:initial}.start-photo strong{font-size:.9rem}
+.home-grid .schedule-summary{margin-top:24px}.quiet-options{margin-top:24px;border-top:1px solid var(--line);padding-top:8px}
+.quiet-options[open]{padding-bottom:12px}.quiet-options .actions{margin-top:12px}
+.writing-date{font-size:.8rem;color:var(--green);margin-top:12px}
+.settings-menu{position:relative}.settings-menu>summary{list-style:none;border:1px solid var(--line);border-radius:14px;background:var(--paper);padding:12px 18px;min-height:56px;font-size:.85rem;font-weight:700}
+.settings-menu>summary::-webkit-details-marker{display:none}
+.settings-panel{position:absolute;right:0;top:calc(100% + 8px);width:260px;z-index:20;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 8px 30px #283d3420}
+.settings-panel button{width:100%}.settings-panel .helper{font-size:.75rem}
+.calendar-screen{max-width:960px;margin:0 auto}.calendar-screen>.lead{margin-top:8px}
+.month-toolbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;margin:28px 0 8px}
+.month-toolbar h2{text-align:center;font-size:1.4rem}.month-toolbar button{font-size:.85rem;padding:10px 16px}
+.calendar-legend{display:flex;justify-content:space-between;align-items:center;margin:0 4px 6px;font-size:.75rem;color:var(--green)}
+.month-calendar{width:100%;table-layout:fixed;border-spacing:5px;border-collapse:separate}
+.month-calendar th{font-size:.8rem;padding:8px 0;color:var(--muted)}.month-calendar th:first-child{color:#9c342b}
+.month-calendar td{padding:0;vertical-align:top}.month-calendar .empty-day{background:#eeeee633;border-radius:12px}
+.calendar-day{position:relative;width:100%;min-width:0;min-height:112px;padding:10px 6px 8px;border:2px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--paper);font-weight:500;line-height:1.3}
+.calendar-day:hover{border-color:var(--green);background:var(--sage)}.calendar-day .day-number{font-weight:750;font-size:1.12rem}
+.calendar-day .today-mark{font-size:.6rem;font-weight:700;color:var(--green)}
+.calendar-day .day-count{font-size:.66rem;font-weight:700;color:var(--green);margin-top:auto}
+.calendar-day .day-preview{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.65rem;color:var(--muted)}
+.calendar-day[aria-current=date]{border-color:var(--green)}
+.calendar-day[aria-pressed=true]{background:var(--green);border-color:var(--green);color:white}
+.calendar-day[aria-pressed=true] .today-mark,.calendar-day[aria-pressed=true] .day-count,.calendar-day[aria-pressed=true] .day-preview{color:#fff}
+.calendar-day:focus-visible{outline:3px solid #9a5c40;outline-offset:1px;z-index:1}
+.selected-day-heading{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:26px;padding-top:22px;border-top:1px solid var(--line)}
+.selected-day-heading h2{font-size:1.1rem}.selected-day-heading span{font-size:.8rem;color:var(--muted)}
+#calendarEvents{margin:12px 0 18px}.event-card{margin:12px 0;padding:18px 22px}.event-manage summary{min-height:44px;font-size:.75rem;padding:8px 0 0}.event-manage .actions{margin-top:6px}
+.calendar-bottom{margin-top:26px}.calendar-jump{margin-top:22px}.calendar-jump input{max-width:320px}
+@media(max-width:680px){
+ main{padding-left:16px;padding-right:16px}.site-header{padding-left:16px;padding-right:16px}.site-header nav{width:auto;gap:6px}.site-header{align-items:center}
+ .settings-menu>summary{font-size:.8rem;padding:11px 14px}.nav-button{font-size:.85rem}.settings-panel{width:240px}
+ .today-pill{font-size:.78rem}.welcome h1{font-size:1.8rem}.welcome .lead{font-size:.87rem}.start-main{min-height:88px}
+ .month-toolbar{gap:6px;margin-top:22px}.month-toolbar h2{font-size:1.05rem;white-space:nowrap}.month-toolbar button{padding:8px;font-size:.74rem;min-height:52px}
+ .month-calendar{border-spacing:2px}.month-calendar th{font-size:.75rem}.calendar-day{padding:8px 2px;min-height:84px;border-radius:9px;gap:2px}
+ .calendar-day .day-number{font-size:1rem}.calendar-day .day-count{font-size:.57rem}.calendar-day .day-preview{display:none}.calendar-day .today-mark{font-size:.52rem}
+ .calendar-legend{font-size:.68rem}.selected-day-heading h2{font-size:.95rem}.event-card{padding:16px}.event-card h2{font-size:1.1rem}
+ .large-type .month-toolbar h2{font-size:.95rem}.large-type .month-toolbar button{font-size:.65rem}.large-type .calendar-day{min-height:96px}.large-type .calendar-day .day-count{font-size:.52rem}
+}
+
+.home-topline #todayLabel{display:none}.home-topline{justify-content:flex-end;margin-bottom:14px}.home-grid .start-choices{margin-top:22px}
+@media(max-width:680px){.welcome>.eyebrow{display:none}.welcome .lead{margin-top:10px}.today-pill{margin-top:16px}.calendar-day{min-height:76px}.large-type .calendar-day{min-height:88px}}

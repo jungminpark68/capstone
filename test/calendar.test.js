@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nextDate,calendarEvent,validDate,localPlans,experienceTurns,enrichPlans} from '../public/calendar.js';
+import {nextDate,calendarEvent,validDate,localPlans,experienceTurns,enrichPlans,monthDays,shiftMonth} from '../public/calendar.js';
 import {localReply,localDraft} from '../diary.js';
 import {newSession,restorable} from '../public/state.js';
 import {createApp} from '../server.js';
@@ -83,4 +83,15 @@ test('HTTP: 체험·모의 AI 모두 치과 발언에서 장소 누락과 모호
  const local=await request(t);const result=await local('plans',body);assert.equal(result.status,200);assert.equal(result.data.events[0].title,'치과 방문');assert.equal(result.data.events[0].location,'치과');
  const ai=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>Response.json({choices:[{message:{content:JSON.stringify({events:[{title:'내일 11시에 와야됨',date:'2027-01-01',time:'',location:''}]})}}]})});
  const repaired=await ai('plans',body);assert.equal(repaired.status,200);assert.equal(repaired.data.events[0].title,'치과 방문');assert.equal(repaired.data.events[0].location,'치과');assert.equal(repaired.data.events[0].time,'');
+});
+
+test('월간 달력은 요일에 맞춰 모든 날짜를 한 번씩 표시하고 윤년을 처리한다',()=>{
+ const days=monthDays('2028-02-10'),dates=days.filter(Boolean);
+ assert.equal(dates.length,29);assert.equal(new Set(dates).size,29);assert.equal(days.length%7,0);assert.equal(days.indexOf('2028-02-01'),2);
+ assert.equal(dates[0],'2028-02-01');assert.equal(dates.at(-1),'2028-02-29');
+ const november=monthDays('2026-11-02');assert.equal(november[0],'2026-11-01');assert.equal(november.filter(Boolean).length,30);
+ assert.throws(()=>monthDays('2026-02-30'));
+});
+test('이전·다음 달 이동은 월말 날짜를 보정하고 연도를 넘긴다',()=>{
+ assert.equal(shiftMonth('2026-01-31',1),'2026-02-28');assert.equal(shiftMonth('2028-03-31',-1),'2028-02-29');assert.equal(shiftMonth('2026-12-15',1),'2027-01-15');assert.equal(shiftMonth('2026-01-01',-1),'2025-12-01');
 });
