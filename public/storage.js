@@ -36,6 +36,23 @@ export async function migrateLegacy(){
 export const listEvents=()=>transact('events','readonly',s=>s.getAll());
 export const putEvent=data=>transact('events','readwrite',s=>s.put(data));
 export const removeEvent=id=>transact('events','readwrite',s=>s.delete(id));
+export async function updateEvent(id,changes){
+ const db=await database();return new Promise((resolve,reject)=>{
+  const tx=db.transaction('events','readwrite'),store=tx.objectStore('events');let result;
+  const request=store.get(id);request.onsuccess=()=>{result={...request.result,...changes,id};store.put(result);};
+  tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 수정하지 못했어요.'));
+ });
+}
+export async function resetAppData(){
+ const db=await database();await new Promise((resolve,reject)=>{
+  const tx=db.transaction(['entries','drafts','events','meta'],'readwrite');
+  for(const name of ['entries','drafts','events','meta'])tx.objectStore(name).clear();
+  // Do not resurrect cleared records from a legacy localStorage copy.
+  tx.objectStore('meta').put({id:'legacy-v2',done:true});
+  tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('기록을 초기화하지 못했어요.'));
+ });
+ for(const key of ['memory-diary-v2','memory-diary-large-type'])try{localStorage.removeItem(key);}catch{}
+}
 export async function putEvents(events){
  const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('events','readwrite');for(const event of events)tx.objectStore('events').put(event);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 저장하지 못했어요.'));});
 }

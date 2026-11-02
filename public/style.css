@@ -54,3 +54,8 @@
 
 .home-topline #todayLabel{display:none}.home-topline{justify-content:flex-end;margin-bottom:14px}.home-grid .start-choices{margin-top:22px}
 @media(max-width:680px){.welcome>.eyebrow{display:none}.welcome .lead{margin-top:10px}.today-pill{margin-top:16px}.calendar-day{min-height:76px}.large-type .calendar-day{min-height:88px}}
+
+.event-completion{display:flex;align-items:center;gap:12px;min-height:56px;margin:12px 0 0;cursor:pointer;font-size:.86rem;color:var(--green)}
+.event-completion input{width:28px;min-width:28px;height:28px;min-height:28px;padding:0;margin:0;accent-color:var(--green);cursor:pointer}
+.event-card.completed{background:var(--sage)}.event-card.completed h2{text-decoration:line-through;color:var(--muted)}
+.reset-options{border-top:1px solid var(--line);margin-top:16px;padding-top:8px}.settings-panel .reset-options button{font-size:.78rem;text-align:left}

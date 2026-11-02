@@ -4,7 +4,7 @@ export function localDate(date=new Date()){
 }
 export function readableDate(value){const date=new Date(`${value}T12:00:00`);return Number.isNaN(date.getTime())?value:date.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});}
 export function newSession(date=localDate()){
- return {version:1,date,stage:'conversation',photos:[],turns:[],question:'',answer:'',todayEvents:[],tomorrowText:'',planCandidates:[],plansReviewed:false,plansSaved:false,draft:null,image:'',imageScene:'',updatedAt:new Date().toISOString()};
+ return {version:1,date,stage:'conversation',photos:[],turns:[],question:'',answer:'',todayEvents:[],tomorrowText:'',planCandidates:[],planNotice:'',planDiagnostic:'',plansReviewed:false,plansSaved:false,draft:null,image:'',imageScene:'',updatedAt:new Date().toISOString()};
 }
 export function currentImage(state){return typeof state?.image==='string'&&/^data:image\/jpeg;base64,/.test(state.image)&&state.draft?.scene?.trim()===state.imageScene?state.image:'';}
 export function makeEntry(state,id){

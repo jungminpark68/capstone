@@ -41,13 +41,13 @@ test('HTTP: 일정 기반 시작, 내일 추출, 경험 분리와 입력 오류'
  for(const data of [{date:'2026-02-30',text:'치과'},{date,text:''},{date,text:'a'.repeat(2001)}])assert.equal((await req('plans',data)).status,400);
  assert.equal((await req('question',{date:'2027-01-01',turns:[],todayEvents:[event]})).status,400);
 });
-test('AI: 일정은 데이터로 전달하고 다른 날짜·잘못된 시간을 반환하면 거절한다',async t=>{
+test('AI: 잘못된 날짜·시간은 버리고 확인 가능한 대체 후보를 안내한다',async t=>{
  const calls=[];let events=[{title:'치과 방문',date:'2027-01-01',time:'',location:''}];
  const req=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async(url,options)=>{calls.push(JSON.parse(options.body));return Response.json({choices:[{message:{content:JSON.stringify({events})}}]});}});
  const good=await req('plans',{date,text:'내일 3시에 치과'});assert.equal(good.status,200);assert.equal(good.data.events[0].time,'');
  const data=JSON.parse(calls[0].messages[1].content[0].text);assert.equal(data.tomorrow,'2027-01-01');assert.equal(data.text,'내일 3시에 치과');
- events=[{...events[0],date:'2027-01-02'}];assert.equal((await req('plans',{date,text:'내일 치과'})).status,502);
- events=[{...events[0],date:'2027-01-01',time:'99:00'}];assert.equal((await req('plans',{date,text:'내일 치과'})).status,502);
+ events=[{...events[0],date:'2027-01-02'}];const wrongDate=await req('plans',{date,text:'내일 치과'});assert.equal(wrongDate.status,200);assert.equal(wrongDate.data.mode,'local');assert.match(wrongDate.data.notice,/확인/);assert.equal(wrongDate.data.events[0].date,'2027-01-01');
+ events=[{...events[0],date:'2027-01-01',time:'99:00'}];const wrongTime=await req('plans',{date,text:'내일 치과'});assert.equal(wrongTime.status,200);assert.equal(wrongTime.data.mode,'local');assert.equal(wrongTime.data.events[0].time,'');assert.ok(wrongTime.data.diagnostic);
 });
 test('AI: 캘린더 예정은 별도 맥락, 내일 발언은 초안 입력에서 제외',async t=>{
  const calls=[];
@@ -94,4 +94,35 @@ test('월간 달력은 요일에 맞춰 모든 날짜를 한 번씩 표시하고
 });
 test('이전·다음 달 이동은 월말 날짜를 보정하고 연도를 넘긴다',()=>{
  assert.equal(shiftMonth('2026-01-31',1),'2026-02-28');assert.equal(shiftMonth('2028-03-31',-1),'2028-02-29');assert.equal(shiftMonth('2026-12-15',1),'2027-01-15');assert.equal(shiftMonth('2026-01-01',-1),'2025-12-01');
+});
+
+test('내일 또 오라는 말은 전체 대화에서 병원과 확인된 장소명을 연결한다',()=>{
+ const turns=[{question:'병원에 갔다오셨나요?',answer:'병원에 갔다왔어요. 내일 11시에 또오래요'},{question:'의사선생님과 무슨 이야기했나요?',answer:'딱히 이야기한 것은 없었어요.'}];
+ const input={date,text:'내일 11시에 또오래요',turns,todayEvents:[{...event,location:'행복병원'}]};
+ const plan=localPlans(input)[0];assert.equal(plan.title,'병원 방문');assert.equal(plan.location,'행복병원');assert.equal(plan.time,'');assert.equal(plan.inferredFromContext,true);
+ const generic=localPlans({...input,todayEvents:[]})[0];assert.equal(generic.location,'병원');
+ const yes=localPlans({...input,turns:[{question:'행복병원에 다녀오셨나요?',answer:'네, 다녀왔어요. 내일 11시에 또오래요'}],todayEvents:[]})[0];assert.equal(yes.location,'행복병원');
+ const repaired=enrichPlans([{title:'11시에 방문',date:'2027-01-01',time:'11:00',location:''}],input.text,input)[0];assert.equal(repaired.title,'병원 방문');assert.equal(repaired.location,'행복병원');assert.equal(repaired.time,'');
+});
+test('여러 장소나 연결 근거가 없으면 병원 일정으로 단정하지 않는다',()=>{
+ const input={date,text:'내일 11시에 또오래요',turns:[],todayEvents:[event]};assert.equal(localPlans(input)[0].location,'');
+ const ambiguous={...input,turns:[{question:'오늘은요?',answer:'병원에 갔다가 은행에 갔어요. 내일 11시에 또오래요'}]};assert.equal(localPlans(ambiguous)[0].location,'');
+ const friend={...input,text:'내일 친구랑 또 만나기로 했어요',turns:[{question:'오늘은요?',answer:'병원에 갔어요'}]};assert.equal(localPlans(friend)[0].location,'');
+});
+test('HTTP: 일정 추출은 대화 전체를 AI에 전달하고 누락된 장소를 보완한다',async t=>{
+ let received;const input={date,text:'내일 11시에 또오래요',turns:[{question:'병원에 갔다오셨나요?',answer:'병원에 갔다왔어요. 내일 11시에 또오래요'}],todayEvents:[{...event,location:'행복병원'}]};
+ const req=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async(url,options)=>{received=JSON.parse(JSON.parse(options.body).messages[1].content[0].text);return Response.json({choices:[{message:{content:JSON.stringify({events:[{title:'11시에 방문',date:'2027-01-01',time:null,location:null,completed:true}]})}}]});}});
+ const result=await req('plans',input);assert.equal(result.status,200);assert.deepEqual(received.turns,input.turns);assert.equal(received.todayEvents[0].location,'행복병원');assert.equal(result.data.events[0].location,'행복병원');assert.equal(result.data.events[0].title,'병원 방문');assert.equal(result.data.events[0].time,'');assert.equal('completed' in result.data.events[0],false);
+});
+test('HTTP: AI 연결 실패도 일정 후보를 확인할 수 있고 오류 원문은 노출하지 않는다',async t=>{
+ const req=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>{throw new Error('private-token sensitive failure');}});
+ const result=await req('plans',{date,text:'내일 치과에서 오전 11시에 오라고 했어요'});assert.equal(result.status,200);assert.equal(result.data.mode,'local');assert.equal(result.data.events[0].location,'치과');assert.equal(result.data.events[0].time,'11:00');assert.match(result.data.notice,/AI/);assert.doesNotMatch(JSON.stringify(result.data),/private-token|sensitive/);
+});
+test('HTTP: 일정 문맥과 완료 상태 입력을 검증한다',async t=>{
+ const req=await request(t),input={date,text:'내일 또 오래요'};
+ for(const extra of [{turns:[{question:'질문',answer:1}]},{turns:Array(9).fill({question:'q',answer:'a'})},{todayEvents:[{...event,completed:'yes'}]},{todayEvents:[{...event,date:'2027-01-01'}]}])assert.equal((await req('plans',{...input,...extra})).status,400);
+});
+test('완료한 일정은 첫 질문에서 다시 수행 여부를 묻지 않는다',()=>{
+ const first=localReply({turns:[],todayEvents:[{...event,completed:true},{...event,title:'은행 방문',completed:false}]});assert.match(first.question,/은행 방문/);assert.doesNotMatch(first.question,/병원/);
+ const all=localReply({turns:[],todayEvents:[{...event,completed:true}]});assert.doesNotMatch(all.question,/실제로|병원/);
 });

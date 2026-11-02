@@ -6,6 +6,7 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
 import {questionPrompt,draftPrompt,imagePrompt,planPrompt} from './prompts.js';
+import {conversationGuard} from './public/conversation.js';
 const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/storage.js':['public/storage.js','text/javascript'],'/state.js':['public/state.js','text/javascript'],'/calendar.js':['public/calendar.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html']};
 export function createApp({env=process.env,fetcher=fetch}={}) {
  const ai=Boolean(env.DIARY_API_KEY?.trim());
@@ -23,10 +24,15 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
     let data,session,draft;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(req.url==='/api/illustration')draft=validateDraft(data);else if(req.url==='/api/plans')session=validatePlanInput(data);else session=validateSession(data);}catch(e){return send(400,{error:e instanceof SyntaxError?'잘못된 요청 형식이에요.':e.message});}
     if(req.url==='/api/plans'){
      if(!ai)return send(200,{events:localPlans(session),mode:'local'});
-     const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date)});
-     return send(200,{events:enrichPlans(validatePlans(result.events,session.date),session.text),mode:'ai'});
+     try{
+      const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date)});
+      return send(200,{events:enrichPlans(validatePlans(result.events,session.date),session.text,session),mode:'ai'});
+     }catch(e){
+      return send(200,{events:localPlans(session),mode:'local',notice:'AI가 일정을 정리하지 못해 대화에서 후보를 준비했어요. 할 일·장소·시간을 확인해 주세요.',diagnostic:e.name==='TimeoutError'?'AI 응답 대기 시간을 초과했어요.':e.message?.startsWith('API ')?e.message:'AI 응답을 일정 형식으로 읽지 못했어요.'});
+     }
     }
     if(req.url==='/api/question'){
+     const guarded=conversationGuard(session);if(guarded)return send(200,{...guarded,mode:'local'});
      if(!session.turns.length&&session.todayEvents.length)return send(200,{...localReply(session),mode:'local'});
      if(!ai)return send(200,{...localReply({...session,turns:experienceTurns(session.turns)}),mode:'local'});
      const result=await chat(questionPrompt,session);
