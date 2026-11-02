@@ -3,7 +3,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 root = Path(__file__).resolve().parent.parent
 output = root.parent / 'memory-diary-windows.zip'
-files = ['package.json', '.gitignore', '.env.example', 'start-windows.cmd', 'README.md',
+files = ['package.json', '.gitignore', '.env.example', 'start-windows.cmd', 'README.md', 'CHANGELOG.md',
          'server.js', 'api-errors.js', 'model-config.js', 'diary.js', 'prompts.js', 'demo.html']
 for folder in ['public', 'scripts', 'test']:
     files.extend(str(p.relative_to(root)) for p in (root / folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts)
