@@ -3,8 +3,8 @@ let connection;
 function database(){
  if(!connection)connection=new Promise((resolve,reject)=>{
   if(!globalThis.indexedDB){reject(new Error('이 브라우저에서 저장 기능을 사용할 수 없어요.'));return;}
-  const request=indexedDB.open(DB_NAME,1);
-  request.onupgradeneeded=()=>{const db=request.result;db.createObjectStore('entries',{keyPath:'id'});db.createObjectStore('drafts',{keyPath:'id'});db.createObjectStore('meta',{keyPath:'id'});};
+  const request=indexedDB.open(DB_NAME,2);
+  request.onupgradeneeded=()=>{const db=request.result;for(const name of ['entries','drafts','meta','events'])if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});};
   request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();connection=null;};resolve(db);};
   request.onerror=()=>{connection=null;reject(request.error);};
   request.onblocked=()=>{connection=null;reject(new Error('다른 창을 닫고 다시 시도해 주세요.'));};
@@ -31,4 +31,11 @@ export async function migrateLegacy(){
  }
  await transact('meta','readwrite',s=>s.put({id:'legacy-v2',done:true}));
  // Preserve the original localStorage copy; do not delete user data during migration.
+}
+
+export const listEvents=()=>transact('events','readonly',s=>s.getAll());
+export const putEvent=data=>transact('events','readwrite',s=>s.put(data));
+export const removeEvent=id=>transact('events','readwrite',s=>s.delete(id));
+export async function putEvents(events){
+ const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('events','readwrite');for(const event of events)tx.objectStore('events').put(event);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 저장하지 못했어요.'));});
 }

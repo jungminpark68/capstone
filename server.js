@@ -1,32 +1,40 @@
+import {validatePlanInput,validatePlans,localPlans,nextDate,experienceTurns} from './public/calendar.js';
 import http from 'node:http';
 import {describeApiError} from './api-errors.js';
 import {imageModel} from './model-config.js';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
-import {questionPrompt,draftPrompt,imagePrompt} from './prompts.js';
-const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/storage.js':['public/storage.js','text/javascript'],'/state.js':['public/state.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html']};
+import {questionPrompt,draftPrompt,imagePrompt,planPrompt} from './prompts.js';
+const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/storage.js':['public/storage.js','text/javascript'],'/state.js':['public/state.js','text/javascript'],'/calendar.js':['public/calendar.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html']};
 export function createApp({env=process.env,fetcher=fetch}={}) {
  const ai=Boolean(env.DIARY_API_KEY?.trim());
  async function api(path,payload,timeout=45000){
   const r=await fetcher('https://api.openai.com/v1'+path,{method:'POST',signal:AbortSignal.timeout(timeout),headers:{Authorization:`Bearer ${env.DIARY_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(payload)});
   if(!r.ok)throw await describeApiError(r);return r.json();
  }
- async function chat(system,session){const result=await api('/chat/completions',{model:env.DIARY_MODEL||'gpt-4o-mini',response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'user',content:[{type:'text',text:JSON.stringify({turns:session.turns,context:contextOf(session.turns)})},...session.photos.map(url=>({type:'image_url',image_url:{url,detail:'low'}}))]}]});return JSON.parse(result.choices[0].message.content);}
+ async function chat(system,session){const {photos=[],...data}=session;const result=await api('/chat/completions',{model:env.DIARY_MODEL||'gpt-4o-mini',response_format:{type:'json_object'},messages:[{role:'system',content:system},{role:'user',content:[{type:'text',text:JSON.stringify({...data,context:contextOf(session.turns||[])})},...photos.map(url=>({type:'image_url',image_url:{url,detail:'low'}}))]}]});return JSON.parse(result.choices[0].message.content);}
  return http.createServer(async(req,res)=>{
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
   try{
    if(req.method==='GET'&&req.url==='/api/config')return send(200,{aiEnabled:ai});
-   if(req.method==='POST'&&['/api/question','/api/draft','/api/illustration'].includes(req.url)){
+   if(req.method==='POST'&&['/api/question','/api/draft','/api/illustration','/api/plans'].includes(req.url)){
     const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>8000000)return send(413,{error:'사진 용량이 너무 커요. 사진 수를 줄여주세요.'});chunks.push(chunk);}
-    let data,session,draft;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(req.url==='/api/illustration')draft=validateDraft(data);else session=validateSession(data);}catch(e){return send(400,{error:e instanceof SyntaxError?'잘못된 요청 형식이에요.':e.message});}
+    let data,session,draft;try{data=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(req.url==='/api/illustration')draft=validateDraft(data);else if(req.url==='/api/plans')session=validatePlanInput(data);else session=validateSession(data);}catch(e){return send(400,{error:e instanceof SyntaxError?'잘못된 요청 형식이에요.':e.message});}
+    if(req.url==='/api/plans'){
+     if(!ai)return send(200,{events:localPlans(session),mode:'local'});
+     const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date)});
+     return send(200,{events:validatePlans(result.events,session.date),mode:'ai'});
+    }
     if(req.url==='/api/question'){
-     if(!ai)return send(200,{...localReply(session),mode:'local'});
+     if(!session.turns.length&&session.todayEvents.length)return send(200,{...localReply(session),mode:'local'});
+     if(!ai)return send(200,{...localReply({...session,turns:experienceTurns(session.turns)}),mode:'local'});
      const result=await chat(questionPrompt,session);
      if(typeof result.question!=='string'||!result.question.trim()||result.question.length>500||typeof result.ready!=='boolean')throw new Error('AI 질문 형식이 올바르지 않아요. 다시 시도해 주세요.');
      return send(200,{question:result.question,ready:result.ready&&session.turns.some(t=>t.answer.trim()),rest:result.rest===true,mode:'ai'});
     }
     if(req.url==='/api/draft'){
+     session.turns=experienceTurns(session.turns);
      try{localDraft(session.turns);}catch(e){return send(400,{error:e.message});}
      if(!ai)return send(200,localDraft(session.turns));
      return send(200,{...validateDraft(await chat(draftPrompt,session)),mode:'ai'});

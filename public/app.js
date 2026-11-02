@@ -1,11 +1,13 @@
+import {calendarEvent,nextDate,localPlans,experienceTurns,temporalParts,validDate} from './calendar.js';
 import {localReply} from './conversation.js';
-import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry} from './storage.js';
+import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvents,putEvent,putEvents,removeEvent} from './storage.js';
 import {localDate,readableDate,newSession,currentImage,makeEntry,restorable} from './state.js';
 const STANDALONE=false;
 const $=id=>document.getElementById(id);
-const screens=['home','photos','conversation','rest','review','result','done','history','detail'];
-const writing=new Set(['photos','conversation','rest','review','result']);
+const screens=['home','photos','conversation','rest','tomorrow','review','result','done','history','detail','calendar'];
+const writing=new Set(['photos','conversation','rest','tomorrow','review','result']);
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
+let calendarReturn='home',editingEventId=null;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
 $('todayLabel').textContent=readableDate(localDate());$('date').value=localDate();
 function notify(message,error=false,detail=''){
@@ -17,9 +19,10 @@ function stopVoice(){try{recognition?.stop();}catch{}window.speechSynthesis?.can
 function view(screen,{focus=true}={}){
  stopVoice();active=screen;for(const name of screens)$(name).hidden=name!==screen;
  if(state&&writing.has(screen)){state.stage=screen;scheduleSave();}
- const step=['conversation','photos','rest'].includes(screen)?0:screen==='review'?1:['result','done'].includes(screen)?2:-1;
+ const step=['conversation','photos','rest'].includes(screen)?0:screen==='tomorrow'?1:screen==='review'?2:['result','done'].includes(screen)?3:-1;
  $('steps').hidden=step<0;[...$('steps').children].forEach((li,i)=>{if(i===step)li.setAttribute('aria-current','step');else li.removeAttribute('aria-current');});
- if(screen==='home')renderResume();
+ $('calendarButton').setAttribute('aria-current',screen==='calendar'?'page':'false');
+ if(screen==='home'){renderResume();refreshHomeSchedule();}
  if(focus){const heading=$(screen).querySelector('h1,h2');requestAnimationFrame(()=>{heading?.focus({preventScroll:true});$('main').scrollIntoView({block:'start',behavior:'instant'});});}
 }
 function renderResume(){
@@ -47,7 +50,7 @@ async function task(fn,message,{drawing=false}={}){
 }
 $('retry').onclick=()=>retryAction?.();
 async function api(path,data){
- if(STANDALONE){if(path==='question')return localReply(data);if(path==='draft'){const answers=data.turns.map(t=>t.answer.trim()).filter(Boolean);return {title:'오늘의 소중한 기억',body:answers.join('\n'),scene:answers.join(' ').slice(0,3000),mode:'local'};}throw new Error('단독 체험 화면에서는 AI 그림을 만들 수 없어요. 서버 실행과 API 키 연결이 필요해요.');}
+ if(STANDALONE){if(path==='question')return localReply({...data,turns:experienceTurns(data.turns)});if(path==='plans')return {events:localPlans(data),mode:'local'};if(path==='draft'){const answers=experienceTurns(data.turns).map(t=>t.answer.trim()).filter(Boolean);if(!answers.length)throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요.');return {title:'오늘의 소중한 기억',body:answers.join('\n'),scene:answers.join(' ').slice(0,3000),mode:'local'};}throw new Error('단독 체험 화면에서는 AI 그림을 만들 수 없어요. 서버 실행과 API 키 연결이 필요해요.');}
  const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(path==='illustration'?135000:55000)});
  let result;try{result=await response.json();}catch{throw new Error('서버의 응답을 읽지 못했어요. 서버가 실행 중인지 확인해 주세요.');}if(!response.ok)throw new Error(result.error||'AI 연결에 실패했어요.');return result;
 }
@@ -62,13 +65,14 @@ async function start(withPhotos){
  if(busy)return;
  if((state||savedDraft)&&!await ask('새 이야기를 시작할까요?','쓰던 이야기는 새 이야기로 바뀌어요. 계속 쓰려면 돌아가기를 눌러주세요.','새로 시작하기'))return;
  if(!$('date').value){notify('기록할 날짜를 선택해 주세요.',true);$('date').focus();return;}
+ let events;try{events=await listEvents();}catch{notify('캘린더를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.',true);return;}
  if(state||savedDraft){try{await clearWorking();}catch{notify('쓰던 이야기를 정리하지 못했어요. 다시 시도해 주세요.',true);return;}}
- state=newSession($('date').value);notify('');
+ state=newSession($('date').value);state.todayEvents=events.filter(e=>e.date===state.date).sort(eventOrder).slice(0,20);notify('');
  if(withPhotos){renderPhotos();view('photos');await persist();}else{state.stage='conversation';view('conversation');paintConversation();await initialQuestion();}
 }
 $('startPhotos').onclick=()=>start(true);$('startTalk').onclick=()=>start(false);
-async function initialQuestion(){await task(async()=>{const response=await api('question',{turns:[],photos:state.photos});state.question=response.question;state.answer='';paintConversation();view('conversation');await persist();},'첫 이야기를 준비하고 있어요…');}
-$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');$('date').value=state.date;renderPhotos();paintConversation();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
+async function initialQuestion(){await task(async()=>{const response=await api('question',sessionInput([]));state.question=response.question;state.answer='';paintConversation();view('conversation');await persist();},'첫 이야기를 준비하고 있어요…');}
+$('resumeDraft').onclick=()=>{state=state||structuredClone(savedDraft);state={...newSession(state.date),...state};if(!restorable(state)){notify('쓰던 이야기를 열지 못했어요. 새 이야기를 시작해 주세요.',true);return;}notify('');$('date').value=state.date;renderPhotos();paintConversation();if(state.stage==='tomorrow')paintTomorrow();if(state.draft)paintReview();if(currentImage(state))paintResult();const target=state.stage;if(target==='result'&&!currentImage(state))view('review');else view(target);if(target==='conversation'&&!state.question)initialQuestion();};
 async function resize(file){const bitmap=await createImageBitmap(file);try{const scale=Math.min(1,900/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.7);}finally{bitmap.close();}}
 function renderPhotos(){
  $('photoCount').textContent=state?.photos.length?`${state.photos.length}장을 골랐어요. 더 골라도 좋아요. (최대 5장)`:'JPG · PNG · WebP / 한 장당 8MB 이하';$('photoGrid').replaceChildren();$('conversationPhotos').replaceChildren();
@@ -86,11 +90,12 @@ $('photoFiles').onchange=()=>{const files=[...$('photoFiles').files];task(async(
 $('beginPhotos').onclick=()=>{if(!state.photos.length){notify('사진을 고르거나 ‘사진 없이 시작할게요’를 눌러주세요.',true);return;}initialQuestion();};
 $('withoutPhotos').onclick=()=>{state.photos=[];renderPhotos();initialQuestion();};
 function paintConversation(){
+ $('scheduleContext').hidden=!state?.todayEvents?.length;if(state?.todayEvents?.length)$('scheduleContext').textContent=`${readableDate(state.date)}의 예정된 일정을 참고하고 있어요. 실제 경험이 다르면 편하게 알려주세요.`;
  $('question').textContent=state?.question||'첫 이야기를 준비하고 있어요.';$('answer').value=state?.answer||'';$('transcript').replaceChildren();
  for(const turn of state?.turns||[]){const p=document.createElement('p');p.textContent=`기억잇다: ${turn.question}\n나: ${turn.answer||'(이 질문은 쉬어갔어요)'}`;$('transcript').append(p);}renderPhotos();
 }
 $('answer').oninput=()=>{if(state){state.answer=$('answer').value;scheduleSave();}};
-function sessionInput(turns=state.turns){return {turns,photos:state.photos};}
+function sessionInput(turns=state.turns){return {turns,photos:state.photos,date:state.date,todayEvents:state.todayEvents||[]};}
 async function makeDraft(turns){
  if(!turns.some(t=>t.answer.trim()))throw new Error('짧은 이야기 하나만 남겨주시면 일기로 정리할 수 있어요.');
  const response=await api('draft',sessionInput(turns));state.turns=turns;state.answer='';state.draft={title:response.title,body:response.body,scene:response.scene};state.image='';state.imageScene='';
@@ -100,11 +105,11 @@ function advance({skip=false,finish=false}={}){
  task(async()=>{
  const answer=skip?'':state.answer.trim();if(!skip&&!finish&&!answer)throw new Error('짧게 적어도 좋아요. 답하기 어려우면 ‘잘 모르겠어요’를 눌러주세요.');
  const turns=[...state.turns,{question:state.question,answer}];
- if(finish||turns.length>=6){await makeDraft(turns);return;}
+ if(finish||turns.length>=6){await finishToday(turns);return;}
  const response=await api('question',sessionInput(turns));
- if(response.ready){await makeDraft(turns);return;}
+ if(response.ready){await finishToday(turns);return;}
  state.turns=turns;state.answer='';state.question=response.question;paintConversation();view(response.rest?'rest':'conversation');await persist();
- },finish?'이야기를 일기로 정리하고 있어요…':'말씀해주신 이야기를 듣고 있어요…');
+ },finish?'오늘 이야기를 정리하고 있어요…':'말씀해주신 이야기를 듣고 있어요…');
 }
 $('next').onclick=()=>advance();$('skip').onclick=()=>advance({skip:true});$('finish').onclick=()=>advance({finish:true});$('pause').onclick=()=>{notify('');view('rest');persist();};$('resume').onclick=()=>{view('conversation');if(!state.question)initialQuestion();};$('restFinish').onclick=()=>advance({finish:true});
 $('readQuestion').onclick=()=>read(state.question);$('readDiary').onclick=()=>read(`${state.draft.title}. ${state.draft.body}`);
@@ -128,7 +133,7 @@ $('draw').onclick=draw;
 function paintResult(){$('resultDate').textContent=readableDate(state.date);$('resultHeading').textContent=state.draft.title;$('resultBody').textContent=state.draft.body;$('illustration').src=currentImage(state);}
 $('resultEdit').onclick=()=>{paintReview();view('review');$('editToggle').click();};
 $('redraw').onclick=async()=>{if(await ask('그림을 다시 그릴까요?','같은 이야기로 새로운 그림을 만들어요. 추가 API 비용이 발생해요.','다시 그리기')){const old=state.image;const oldScene=state.imageScene;await task(async()=>{const response=await api('illustration',state.draft);state.image=response.image;state.imageScene=state.draft.scene.trim();paintResult();await persist();},'새로운 그림을 그리고 있어요…',{drawing:true});if(!state.image){state.image=old;state.imageScene=oldScene;}}};
-$('backToTalk').onclick=()=>{const last=state.turns.pop();if(last){state.question=last.question;state.answer=last.answer;}paintConversation();notify('');view('conversation');persist();};
+$('backToTalk').onclick=backToToday;
 async function saveEntry(textOnly=false){
  await task(async()=>{const entry=makeEntry(state,state.entryId||(state.entryId=crypto.randomUUID()));if(textOnly){entry.image='';entry.imageKind=null;}else if(!entry.image)throw new Error('저장할 그림이 없어요. 글로 먼저 저장할 수 있어요.');
  await putEntry(entry);selectedEntry=entry;await clearWorking();$('doneDescription').textContent=textOnly?'그림이 없어도 소중한 하루의 기록이에요. 내 일기장에서 다시 만날 수 있어요.':'나눈 이야기와 그림을 내 일기장에 담았어요. 언제든 다시 펼쳐보세요.';view('done');
@@ -173,5 +178,90 @@ async function initialize(){
  else try{const response=await fetch('/api/config');if(!response.ok)throw new Error();const config=await response.json();$('mode').textContent=config.aiEnabled?'오늘의 그림일기':'체험으로 둘러보기';$('connectionInfo').textContent=config.aiEnabled?'서버에 API 키가 설정돼 있어요. 실제 이용 가능 여부는 모델 권한과 결제 상태에 따라 달라요.':'현재는 규칙 기반 체험 모드예요. 실제 AI 사용에는 서버의 .env에 API 키 설정이 필요해요.';}catch{$('mode').textContent='연결 확인 필요';$('connectionInfo').textContent='서버 연결을 확인해 주세요.';}
  try{const stored=await getDraft();if(restorable(stored))savedDraft=stored;renderResume();}catch{$('autosaveStatus').textContent='이 브라우저에서는 임시 저장을 사용할 수 없어요.';}
 }
-initialize();
+initialize();refreshHomeSchedule();
 window.addEventListener('pagehide',()=>persist());
+
+function eventOrder(a,b){return (a.time||'99:99').localeCompare(b.time||'99:99')||a.title.localeCompare(b.title);}
+async function refreshHomeSchedule(){
+ try{const date=$('date').value||localDate(),events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);
+ $('homeSchedule').querySelector('strong').textContent=`${date===localDate()?'오늘':readableDate(date)}의 일정`;
+ $('homeScheduleText').textContent=events.length?events.map(e=>`${e.time||'시간 미정'} · ${e.title}`).join('\n'):'아직 적어둔 일정이 없어요. 일정이 없어도 편하게 이야기할 수 있어요.';
+ }catch{$('homeScheduleText').textContent='이 브라우저에서 캘린더를 읽지 못했어요.';}
+}
+$('date').onchange=refreshHomeSchedule;
+async function finishToday(turns){
+ if(!experienceTurns(turns).some(t=>t.answer.trim()))throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요. 내일 일정은 다음 단계에서 따로 챙길게요.');
+ state.turns=turns;state.answer='';
+ if(state.plansReviewed){await makeDraft(turns);return;}
+ if(!state.tomorrowText)state.tomorrowText=turns.flatMap(t=>temporalParts(t.answer)).filter(a=>/내일/.test(a)).join('\n').slice(0,2000);
+ paintTomorrow();view('tomorrow');await persist();
+}
+function paintTomorrow(){
+ $('tomorrowDate').textContent=`${readableDate(nextDate(state.date))}에 할 일을 함께 챙겨볼까요?`;
+ $('tomorrowAnswer').value=state.tomorrowText||'';
+ const saved=state.plansSaved,review=Boolean(state.planCandidates?.length)&&!saved;
+ $('planSavedNote').hidden=!saved;$('planInputPanel').hidden=saved||review;
+ $('tomorrowTitle').textContent=saved?'내일 일정을 챙겼어요':review?'내일 일정, 이렇게 적을까요?':'내일 하실 일이 있으세요?';$('planReviewPanel').hidden=!review;
+ $('skipPlans').textContent=saved?'오늘 일기 만들기':'일정 등록 없이 일기 만들기';
+ $('confirmPlans').hidden=false;$('existingPlans').hidden=true;
+ $('planCards').replaceChildren();
+ for(const [i,event] of (state.planCandidates||[]).entries()){
+  const card=document.createElement('fieldset');card.className='plan-card';const legend=document.createElement('legend');legend.textContent=`${i+1}번째 일정`;card.append(legend);
+  for(const [key,label,type,max] of [['title','할 일','text',100],['date','날짜','date'],['time','시간 (모르면 비워두세요)','time'],['location','장소 (선택)','text',200]]){
+   const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);input.max=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;scheduleSave();};card.append(name,input);
+  }
+  const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='이 일정은 빼기';remove.onclick=()=>{state.planCandidates.splice(i,1);paintTomorrow();scheduleSave();};card.append(remove);$('planCards').append(card);
+ }
+}
+$('tomorrowAnswer').oninput=()=>{state.tomorrowText=$('tomorrowAnswer').value;state.planCandidates=[];$('planReviewPanel').hidden=true;scheduleSave();};
+$('extractPlans').onclick=()=>task(async()=>{
+ const result=await api('plans',{date:state.date,text:state.tomorrowText});
+ state.planCandidates=result.events.map(e=>({...calendarEvent(e),id:crypto.randomUUID()}));
+ paintTomorrow();await persist();
+ if(!result.events.length){$('planReviewPanel').hidden=false;$('confirmPlans').hidden=true;$('existingPlans').hidden=false;$('existingPlans').textContent='내일 일정 후보를 찾지 못했어요. 다시 적거나, 직접 일정 적기 또는 일정 등록 없이 일기 만들기를 선택해 주세요.';}
+ else{ $('confirmPlans').hidden=false;const existing=(await listEvents()).filter(e=>e.date===nextDate(state.date));$('existingPlans').hidden=!existing.length;$('existingPlans').textContent=existing.length?`이미 등록된 일정: ${existing.map(e=>`${e.time||'시간 미정'} ${e.title}`).join(', ')}. 같은 일정인지 확인해 주세요.`:'';}
+ $('planReviewHeading').focus();
+},'내일 할 일을 정리하고 있어요…');
+$('manualPlan').onclick=()=>{state.planCandidates=[{id:crypto.randomUUID(),title:'',date:nextDate(state.date),time:'',location:''}];paintTomorrow();$('confirmPlans').hidden=false;$('existingPlans').hidden=true;$('plan-0-title').focus();scheduleSave();};
+$('revisePlans').onclick=()=>{state.planCandidates=[];paintTomorrow();$('tomorrowAnswer').focus();scheduleSave();};
+$('confirmPlans').onclick=()=>task(async()=>{
+ if(!state.planCandidates.length)throw new Error('확인할 일정이 없어요. 일정 없이 일기를 만들 수도 있어요.');
+ const events=state.planCandidates.map(e=>({...calendarEvent(e),id:e.id,source:'conversation',savedAt:new Date().toISOString()}));
+ if(events.some(e=>e.date!==nextDate(state.date)))throw new Error('내일 날짜로 확인해 주세요. 다른 날의 일정은 캘린더에서 적을 수 있어요.');
+ const existing=await listEvents();
+ const fresh=events.filter((e,i)=>!existing.some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location)&&!events.slice(0,i).some(old=>old.title===e.title&&old.time===e.time&&old.location===e.location));
+ await putEvents(fresh);state.plansReviewed=true;state.plansSaved=true;paintTomorrow();await persist();await makeDraft(state.turns);
+},'확인한 일정을 저장하고 오늘 일기를 만들고 있어요…');
+$('skipPlans').onclick=()=>task(async()=>{state.plansReviewed=true;await persist();await makeDraft(state.turns);},'오늘 이야기를 일기로 정리하고 있어요…');
+function backToToday(){const last=state.turns.pop();if(last){state.question=last.question;state.answer=last.answer;}paintConversation();notify('');view('conversation');persist();}
+$('tomorrowBack').onclick=backToToday;
+async function showCalendar(){
+ const from=active;if(from!=='calendar')calendarReturn=from;
+ await task(async()=>{if(state)await persist();$('calendarDate').value=state?.date||$('date').value||localDate();$('eventForm').hidden=true;await renderCalendar();view('calendar');},'캘린더를 펼치고 있어요…');
+}
+async function renderCalendar(){
+ const date=$('calendarDate').value;if(!validDate(date))throw new Error('날짜를 선택해 주세요.');
+ const events=(await listEvents()).filter(e=>e.date===date).sort(eventOrder);$('calendarEvents').replaceChildren();
+ if(!events.length){const p=document.createElement('p');p.className='empty-state';p.textContent='아직 적어둔 일정이 없어요. 아래에서 새 일정을 적을 수 있어요.';$('calendarEvents').append(p);}
+ for(const event of events){
+  const card=document.createElement('article');card.className='event-card';const h=document.createElement('h2');h.textContent=event.title;const p=document.createElement('p');p.textContent=`${event.time||'시간 미정'}${event.location?' · '+event.location:''}`;
+  const actions=document.createElement('div');actions.className='actions';const edit=document.createElement('button');edit.className='secondary';edit.textContent='일정 고치기';edit.onclick=()=>editEvent(event);
+  const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='일정 삭제';remove.onclick=async()=>{if(!await ask('이 일정을 지울까요?',`${event.title} 일정을 캘린더에서 삭제해요.`,'일정 삭제'))return;await task(async()=>{await removeEvent(event.id);await renderCalendar();await refreshHomeSchedule();},'일정을 정리하고 있어요…');};
+  actions.append(edit,remove);card.append(h,p,actions);$('calendarEvents').append(card);
+ }
+}
+function editEvent(event=null){
+ editingEventId=event?.id||crypto.randomUUID();$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
+ for(const [id,key] of [['eventTitle','title'],['eventDate','date'],['eventTime','time'],['eventLocation','location']])$(id).value=event?.[key]||(key==='date'?$('calendarDate').value:'');
+ $('eventTitle').focus();
+}
+$('calendarButton').onclick=showCalendar;$('homeCalendar').onclick=showCalendar;
+$('calendarDate').onchange=()=>task(renderCalendar,'일정을 살펴보고 있어요…');
+for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?nextDate($('calendarDate').value,days):localDate();$('eventForm').hidden=true;await renderCalendar();},'일정을 살펴보고 있어요…');
+$('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;};
+$('eventForm').onsubmit=event=>{event.preventDefault();task(async()=>{
+ const data=calendarEvent({title:$('eventTitle').value,date:$('eventDate').value,time:$('eventTime').value,location:$('eventLocation').value});
+ await putEvent({...data,id:editingEventId,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;await renderCalendar();await refreshHomeSchedule();
+},'일정을 저장하고 있어요…');};
+$('calendarReturn').onclick=()=>{notify('');view(calendarReturn);};
+$('calendarTalk').onclick=()=>{$('date').value=$('calendarDate').value;start(false);};

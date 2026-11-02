@@ -7,9 +7,9 @@ export function contextOf(turns) {
     activity:/산책|공원|걷|걸었|먹|식사|음식|밥|요리|만들|갔|다녀|만났|봤|보았|읽|청소|쉬었|쉬고|운동|시장|병원|집에서|집에/.test(text),
     stop:/쉬고 싶|그만|여기까지|피곤|지쳤|기억 안|기억이 안|모르겠|생각이 안/.test(turns.at(-1)?.answer||'')};
 }
-export function localReply({turns,photos=[]}) {
+export function localReply({turns,photos=[],todayEvents=[]}) {
   const c=contextOf(turns);
-  if(!turns.length)return {question:photos.length?'사진에 담긴 오늘의 이야기를 들려주시겠어요?':'오늘 기억에 남는 일이 있나요? 식사나 집에서 보낸 시간도 좋아요.',ready:false};
+  if(!turns.length)return {question:todayEvents.length?`달력에 ${todayEvents[0].time?todayEvents[0].time+' ':''}‘${todayEvents[0].title}’ 일정이 있어요. 실제로는 어떻게 보내셨나요? 일정이 바뀌었어도 괜찮아요.`:photos.length?'사진에 담긴 오늘의 이야기를 들려주시겠어요?':'오늘 기억에 남는 일이 있나요? 식사나 집에서 보낸 시간도 좋아요.',ready:false};
   if(c.stop)return c.hasStory&&turns.some(t=>t.answer.trim()&&!/쉬고 싶|그만|여기까지|피곤|지쳤|기억.*안|모르겠/.test(t.answer))?{question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true}:{question:'괜찮아요. 잠시 쉬었다가 이어가도 좋아요.',ready:false,rest:true};
   if(c.hasStory&&((c.activity&&c.feeling&&(c.detail||c.text.length>=30))||turns.length>=6))return {question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true};
   const choices=[];
