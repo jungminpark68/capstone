@@ -39,7 +39,7 @@ export function validatePlanInput(input){
  const events=todayEvents.map(calendarEvent);if(events.some(e=>e.date!==input.date))throw new Error('오늘 일정 날짜를 확인해 주세요.');
  return {date:input.date,text:input.text.trim(),turns:turns.map(t=>({question:t.question,answer:t.answer})),todayEvents:events};
 }
-const DATE_WORDS=String.raw`\d{4}-\d{2}-\d{2}|(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일|(?:다음|이번)\s*주\s*[월화수목금토일]요일|[월화수목금토일]요일|(?:이번|다음)\s*달\s*\d{1,2}일|\d{1,2}일\s*(?:후|뒤)|\d{1,2}일|내일|모레|모래(?=(?:에는?|는|은)?\s*(?:오전|오후|아침|저녁|밤|낮|\d{1,2}\s*(?:시|:)|몇\s*시))|글피|오늘|다음\s*(?:주|달)|이번\s*주`;
+const DATE_WORDS=String.raw`\d{4}-\d{2}-\d{2}|(?:\d{4}년\s*)?\d{1,2}월\s*\d{1,2}일|(?:다음|이번)\s*주\s*[월화수목금토일]요일|[월화수목금토일]요일|(?:이번|다음)\s*달\s*\d{1,2}일|\d{1,2}일\s*(?:후|뒤)|\d{1,2}일|내일|모레|모래(?=(?:에는?|는|은)?\s*(?:오전|오후|아침|저녁|밤|낮|\d{1,2}\s*(?:시|:)|몇\s*시)|\s*(?:그리고|이랑|랑|하고|[,·/]|\d{1,2}일|$))|글피|오늘|다음\s*(?:주|달)|이번\s*주`;
 function dateWords(){return new RegExp(DATE_WORDS,'g');}
 function resolvePlanDate(word,base){
  if(/내일/.test(word))return nextDate(base);
@@ -65,31 +65,71 @@ function resolvePlanDate(word,base){
  return ''; // A week/month without a day needs the user's date confirmation.
 }
 function noPlan(text){return /^(?:없|몰라|모르겠|아직|쉬)/.test(text)||/^(?:(?:아무(?:런)?|특별한|정해진)\s*)?(?:계획|일정|할\s*일)(?:은|는|이|도)?\s*없/.test(text);}
+const TIME_WORDS=String.raw`(?:(?:(오전|오후|아침|저녁|밤|낮)\s*)?(\d{1,2})\s*시(?:\s*(반|\d{1,2}\s*분))?|\b([01]?\d|2[0-3]):([0-5]\d)\b)(?:에는|에)?`;
+function timeWords(){return new RegExp(TIME_WORDS,'g');}
+function planClock(text){
+ const clock=new RegExp(TIME_WORDS).exec(text);if(!clock)return {source:'',time:''};
+ if(clock[4])return {source:clock[0],time:`${clock[4].padStart(2,'0')}:${clock[5]}`};
+ let hour=Number(clock[2]),minute=clock[3]==='반'?30:parseInt(clock[3]||'0',10);const period=clock[1];
+ if(hour>23||minute>59)return {source:clock[0],time:''};
+ if(!period&&hour>=1&&hour<=12)return {source:clock[0],time:'',ambiguous:{hour,minute}};
+ if(period){if(hour>12)return {source:clock[0],time:''};hour=hour%12+(/오후|저녁|낮/.test(period)||period==='밤'&&hour!==12?12:0);}
+ return {source:clock[0],time:`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`};
+}
+function dateJoinKind(text){
+ // A date list may attach different times to each date, but contains no action.
+ const rest=text.replace(timeWords(),'').replace(/그리고|이랑|하고|또는|아니면|혹은|및|에는|날에|날|랑|과|와|에|은|는|도|또|쯤|경|[\s,、·/]/g,'');
+ if(rest)return null;
+ return /또는|아니면|혹은/.test(text)?'alternative':'and';
+}
+function planBody(text){
+ const first=new RegExp(`^\\s*(?:${DATE_WORDS})`).exec(text);
+ if(first)text=text.slice(first[0].length).replace(/^\s*(?:날)?(?:에는?|은|는|도)?\s*/,'');
+ return text.trim();
+}
 function planSegments(text,base){
  const marks=[...text.matchAll(dateWords())],sections=[];
- if(!marks.length)sections.push({text,date:nextDate(base),specified:false});
- else{
-  marks.forEach((mark,i)=>sections.push({text:text.slice(i===0?0:mark.index,marks[i+1]?.index??text.length),date:resolvePlanDate(mark[0],base),specified:true}));
+ if(!marks.length)sections.push({text,date:nextDate(base)});
+ for(let i=0;i<marks.length;i++){
+  const start=i;let alternative=false;
+  while(i+1<marks.length){
+   const join=dateJoinKind(text.slice(marks[i].index+marks[i][0].length,marks[i+1].index));
+   if(!join)break;alternative||=join==='alternative';i++;
+  }
+  const end=marks[i+1]?.index??text.length,prefix=start===0?text.slice(0,marks[start].index):'';
+  if(i===start){sections.push({text:prefix+text.slice(marks[i].index,end),date:resolvePlanDate(marks[i][0],base)});continue;}
+  const tail=planBody(text.slice(marks[i].index,end)),commonClock=planClock(tail);
+  const action=(prefix+' '+(commonClock.source?tail.replace(commonClock.source,''):tail)).trim();
+  if(!action||dateJoinKind(action))continue;
+  // Apply a trailing shared action only to this contiguous date/time list.
+  for(let j=start;j<=i;j++){
+   const modifier=text.slice(marks[j].index+marks[j][0].length,j===i?end:marks[j+1].index);
+   const ownClock=planClock(modifier),clock=ownClock.source?ownClock:commonClock;
+   const origin=ownClock.source&&j!==i?marks[j].index:marks[i].index;
+   sections.push({text:`${marks[j][0]} ${clock.source} ${action}`,date:alternative?'':resolvePlanDate(marks[j][0],base),timeGroup:`dates-${marks[start].index}-${origin}`});
+   if(alternative)break; // An either/or date needs one date confirmation, not two bookings.
+  }
  }
  return sections.flatMap(section=>section.text.split(/\n|[.!?。]|(?:\s*그리고\s*)/).flatMap(part=>{
-  // Two clock times in the same clause can describe two separate activities.
-  const times=[...part.matchAll(/(?:(?:오전|오후|아침|저녁|밤|낮)\s*)?\d{1,2}\s*시(?:\s*(?:반|\d{1,2}\s*분))?|\b\d{1,2}:[0-5]\d\b/g)];
+  const times=[...part.matchAll(timeWords())];
   const pieces=times.length>1?times.map((m,i)=>part.slice(i===0?0:m.index,times[i+1]?.index??part.length)):[part];
-  return pieces.map(value=>({...section,text:value.trim()}));
+  return pieces.map((value,i)=>({...section,text:value.trim(),timeGroup:section.timeGroup?`${section.timeGroup}:${i}`:undefined}));
  })).filter(part=>{
-  const content=part.text.replace(dateWords(),'').replace(/^(?:에는?|는|은|에)?\s*/,'').replace(/(?:하고|되고|그리고|또)\s*$/,'').trim();
-  return content&&!noPlan(content)&&(!part.date||part.date>base);
+  const content=planBody(part.text).replace(/(?:하고|되고|그리고|또)\s*$/,'').trim();
+  return content&&!noPlan(content)&&(dateJoinKind(content)===null||planClock(content).source)&&(!part.date||part.date>base);
  });
 }
-export function planDateHints({date,text}){return planSegments(text,date).map(p=>({text:p.text,date:p.date}));}
+export function planDateHints({date,text}){return planSegments(text,date).map(p=>({text:p.text,date:p.date,...(p.timeGroup?{sharedTimeGroup:p.timeGroup}:{})}));}
 export function planCandidate(value){
  const date=value?.date??'';if(typeof date!=='string')throw new Error('AI 일정 날짜 형식이 올바르지 않아요.');
  const checked=calendarEvent({...value,date:date||'2000-01-01',time:value?.time??'',location:value?.location??''});
- return {title:checked.title,date,time:checked.time,location:checked.location};
+ const result={title:checked.title,date,time:checked.time,location:checked.location};
+ if(value.pendingTime!==undefined){const t=value.pendingTime;if(!t||!Number.isInteger(t.hour)||t.hour<1||t.hour>12||!Number.isInteger(t.minute)||t.minute<0||t.minute>59||typeof t.group!=='string'||!t.group||t.group.length>100)throw new Error('시간 확인 형식이 올바르지 않아요.');result.pendingTime={hour:t.hour,minute:t.minute,group:t.group};}
+ return result;
 }
 export function validatePlans(value,date,text){
  if(!Array.isArray(value)||value.length>5)throw new Error('AI 일정 형식이 올바르지 않아요. 최대 다섯 개씩 확인해 주세요.');
- const events=value.map(item=>{const event=planCandidate(item);if(event.date&&event.date<=date)throw new Error('AI가 지난 날짜를 반환했어요. 날짜를 확인해 주세요.');return event;});
+ const events=value.map(item=>{const event=planCandidate({...item,pendingTime:undefined});if(event.date&&event.date<=date)throw new Error('AI가 지난 날짜를 반환했어요. 날짜를 확인해 주세요.');return event;});
  if(text!==undefined){
   const hints=planDateHints({date,text}),allowed=new Set(hints.map(h=>h.date));
   if(events.some(e=>!allowed.has(e.date)))throw new Error('AI가 말씀하신 것과 다른 날짜를 반환했어요.');
@@ -99,11 +139,12 @@ export function validatePlans(value,date,text){
 }
 function statedPlanDetails(text){
  // Preserve the place the user actually named; do not invent a clinic or address.
- const place=text.match(/([가-힣A-Za-z0-9·-]*(치과|병원|의원|약국|은행|보건소|주간보호센터))(?:에서|에|으로|로|(?=[?!.\s]|$))/);
+ text=planBody(text);
+ const place=text.match(/([가-힣A-Za-z0-9·-]*(치과|병원|의원|약국|은행|보건소|주간보호센터|식당|레스토랑|카페))(?:에서|에|으로|로|(?=[?!.\s]|가야|가요|가려고|갈|방문|예약|오래|오라|$))/);
  if(!place)return {location:'',title:''};
  const location=place[1].replace(/^(?:내일|모레|모래|글피)(?:은|는)?/,'');
- const visiting=/가요|가야|가려고|갑니|갈\s|갈게|방문|예약|와야|오라고|오라|오래요|오시|진료|검진|치료|스케일링/.test(text)&&!/일해|근무|출근|일하/.test(text);
- return {location,title:visiting?`${place[2]} 방문`:''};
+ const visiting=/가요|가야|가려고|가고|가기로|갑니|갈\s|갈게|방문|예약|와야|오라고|오라|오래(?:요)?(?=\s|\d|[.!?]|$)|오시|진료|검진|치료|스케일링/.test(text)&&!/일해|근무|출근|일하/.test(text);
+ return {location,title:/식당|레스토랑|카페/.test(place[2])&&/예약/.test(text)?`${place[2]} 예약`:visiting?`${place[2]} 방문`:''};
 }
 function contextualPlanDetails(part,{turns=[],todayEvents=[]}={}){
  if(!/오래|오라고|와야|(?:또|다시).{0,12}(?:오|가|방문)|거기|그곳|같은\s*곳|방문/.test(part))return {location:'',title:''};
@@ -111,7 +152,7 @@ function contextualPlanDetails(part,{turns=[],todayEvents=[]}={}){
  for(let i=quoted<0?turns.length-1:quoted;i>=0;i--){
   const turn=turns[i],before=turn.answer.includes(part)?turn.answer.slice(0,turn.answer.indexOf(part)):turn.answer;
   const past=temporalParts(before).filter(t=>!futureReference(t)).join(' ');
-  const places=[...past.matchAll(/([가-힣A-Za-z0-9·-]*(?:치과|병원|의원|약국|은행|보건소|주간보호센터))(?:에서|에|으로|로|(?=[?!.\s]|$))/g)].map(m=>m[1]);
+  const places=[...past.matchAll(/([가-힣A-Za-z0-9·-]*(?:치과|병원|의원|약국|은행|보건소|주간보호센터|식당|레스토랑|카페))(?:에서|에|으로|로|(?=[?!.\s]|$))/g)].map(m=>m[1]);
   if(new Set(places).size>1)return {location:'',title:''};
   let location=places[0];
   if(!location&&/갔다|다녀|갔|방문했|왔어요|맞아요|^네[.,! ]/.test(past)&&!/안\s*갔|아니|취소/.test(past))location=statedPlanDetails(turn.question).location;
@@ -127,31 +168,28 @@ function contextualPlanDetails(part,{turns=[],todayEvents=[]}={}){
  return {location:'',title:''};
 }
 export function enrichPlans(events,text,context={}){
- const parts=planSegments(text,context.date||events[0]?.date||'2000-01-01'),details=parts.map(part=>{const direct=statedPlanDetails(part.text);return {...(direct.location?direct:contextualPlanDetails(part.text,context)),text:part.text,date:part.date};});
+ const parts=planSegments(text,context.date||events[0]?.date||'2000-01-01'),details=parts.map(part=>{const direct=statedPlanDetails(part.text);return {...(direct.location?direct:contextualPlanDetails(part.text,context)),text:part.text,date:part.date,timeGroup:part.timeGroup};});
  return events.map(event=>{
   // For several appointments, fill only from a uniquely matching source clause.
   const sameDate=context.date?details.filter(d=>d.date===event.date):details;
   const matches=sameDate.filter(d=>d.location&&(event.title.includes(d.location)||event.location===d.location));
   const detail=sameDate.length===1?sameDate[0]:matches.length===1?matches[0]:null;
   if(!detail)return event;
-  const vague=/내일|\d+\s*시|와야|가야|오라고|오라|가기|^방문$|^일정$|^약속$|^재방문$/.test(event.title);
-  const hour=detail.text.match(/(\d{1,2})\s*시/),ambiguous=hour&&Number(hour[1])>=1&&Number(hour[1])<=12&&!/오전|오후|아침|저녁|밤|낮/.test(detail.text);
-  return {...event,time:ambiguous?'':event.time,title:detail.title&&vague?detail.title:event.title,location:detail.inferredFromContext?detail.location:event.location||detail.location,...(detail.inferredFromContext?{inferredFromContext:true}:{})};
+  const vague=/내일|\d+\s*시|와야|가야|오라고|오라|가기|^방문$|^일정$|^약속$|^재방문$|^(?:이랑|랑|그리고|또|및|과|와|날|기타|할 일)$/.test(event.title);
+  const clock=planClock(detail.text);
+  const result={...event,time:clock.source?clock.time:event.time,title:detail.title&&vague?detail.title:event.title,location:detail.inferredFromContext?detail.location:event.location||detail.location,...(detail.inferredFromContext?{inferredFromContext:true}:{})};
+  if(clock.ambiguous&&detail.timeGroup)result.pendingTime={...clock.ambiguous,group:detail.timeGroup};
+  return result;
  });
 }
 export function localPlans({date,text,turns=[],todayEvents=[]}){
  const parts=planSegments(text,date);
  if(parts.length>5)throw new Error('일정은 한 번에 다섯 개까지 확인할 수 있어요. 나누어 등록해 주세요.');
- return parts.map(({text:part,date:planDate})=>{
-  const clock=part.match(/(?:(오전|오후|아침|저녁|밤|낮)\s*)?(\d{1,2})\s*시(?:\s*(반|\d{1,2}\s*분))?/);
-  let time='';
-  if(clock){let hour=Number(clock[2]),minute=clock[3]==='반'?30:parseInt(clock[3]||'0',10);const period=clock[1];
-   if(hour<=23&&minute<60){if(period&&hour<=12){hour=hour%12+(/오후|저녁|낮/.test(period)||period==='밤'&&hour!==12?12:0);time=`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;}else if(!period&&(hour===0||hour>12))time=`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;}
-  }
-  const digital=part.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);if(digital)time=`${digital[1].padStart(2,'0')}:${digital[2]}`;
+ return parts.map(({text:part,date:planDate,timeGroup})=>{
+  const clock=planClock(part);
   const direct=statedPlanDetails(part),detail=direct.location?direct:contextualPlanDetails(part,{turns,todayEvents});
-  const title=detail.title||part.replace(dateWords(),'').replace(/^(?:에는?|는|은|에)?\s*/,'').trim().slice(0,100)||'다가오는 할 일';
-  return {title,date:planDate,time,location:detail.location,...(detail.inferredFromContext?{inferredFromContext:true}:{})};
+  const title=detail.title||planBody(part).slice(0,100)||'다가오는 할 일';
+  return {title,date:planDate,time:clock.time,location:detail.location,...(detail.inferredFromContext?{inferredFromContext:true}:{}),...(clock.ambiguous&&timeGroup?{pendingTime:{...clock.ambiguous,group:timeGroup}}:{})};
  });
 }
 export function temporalParts(text){

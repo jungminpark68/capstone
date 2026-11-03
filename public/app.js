@@ -217,10 +217,11 @@ function paintTomorrow(){
   if(!event.date){const dateNote=document.createElement('p');dateNote.className='inline-note';dateNote.textContent='날짜를 정확히 정하지 못했어요. 아래에서 날짜를 골라주세요.';card.append(dateNote);}
   if(event.inferredFromContext){const note=document.createElement('p');note.className='helper';note.textContent='앞서 나눈 이야기에서 장소를 연결했어요. 이 장소가 맞는지 확인해 주세요.';card.append(note);}
   for(const [key,label,type,max] of [['title','할 일','text',100],['date','날짜','date'],['time','시간 (모르면 비워두세요)','time'],['location','장소 (선택)','text',200]]){
-   const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;scheduleSave();};card.append(name,input);
+   const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;if(key==='time')delete event.pendingTime;if(key==='time'||key==='date')renderPendingTimeChoices();scheduleSave();};card.append(name,input);
   }
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='이 일정은 빼기';remove.onclick=()=>{state.planCandidates.splice(i,1);paintTomorrow();scheduleSave();};card.append(remove);$('planCards').append(card);
  }
+ renderPendingTimeChoices();
 }
 $('tomorrowAnswer').oninput=()=>{state.tomorrowText=$('tomorrowAnswer').value;state.planCandidates=[];$('planReviewPanel').hidden=true;scheduleSave();};
 $('extractPlans').onclick=()=>task(async()=>{
@@ -235,6 +236,7 @@ $('manualPlan').onclick=()=>{if(state.plansSaved)return;if(state.planCandidates.
 $('revisePlans').onclick=()=>{state.planCandidates=[];paintTomorrow();$('tomorrowAnswer').focus();scheduleSave();};
 $('confirmPlans').onclick=()=>task(async()=>{
  if(!state.planCandidates.length)throw new Error('확인할 일정이 없어요. 일정 없이 일기를 만들 수도 있어요.');
+ if(state.planCandidates.some(e=>e.pendingTime))throw new Error('말씀하신 시간이 오전인지 오후인지 확인해 주세요. 아직 모르면 ‘시간은 아직 모르겠어요’를 선택할 수 있어요.');
  const events=state.planCandidates.map(e=>({...calendarEvent(e),id:e.id,source:'conversation',savedAt:new Date().toISOString()}));
  if(events.some(e=>e.date<=state.date))throw new Error('각 일정의 날짜를 기록 날짜 다음 날 이후로 확인해 주세요.');
  const existing=await listEvents();
@@ -327,10 +329,29 @@ $('resetAllData').onclick=async()=>{
  await task(async()=>{
   clearTimeout(saveTimer);generation++;await saveQueue.catch(()=>{});await resetAppData();state=null;savedDraft=null;selectedEntry=null;saveQueue=Promise.resolve();$('autosaveStatus').textContent='';
   document.documentElement.classList.remove('large-type');$('fontButton').setAttribute('aria-pressed','false');$('fontButton').innerHTML='가<span class="font-label"> 글씨 크게</span>';
-  for(const id of ['diaries','calendarEvents','detailCard','transcript','photoGrid','conversationPhotos','planCards'])$(id).replaceChildren();
+  for(const id of ['diaries','calendarEvents','detailCard','transcript','photoGrid','conversationPhotos','planCards','pendingTimeChoices'])$(id).replaceChildren();
   for(const id of ['answer','tomorrowAnswer','title','body','scene','photoFiles'])$(id).value='';
   for(const id of ['previewTitle','previewBody','previewScene','resultHeading','resultBody','question','planNotice','planDiagnosticText'])$(id).textContent='';
   $('illustration').removeAttribute('src');$('eventForm').reset();$('eventForm').hidden=true;view('home');await refreshHomeSchedule();reset=true;
  },'이 기기의 기록을 초기화하고 있어요…');
  if(reset)notify('기록을 모두 지웠어요. 오늘의 새 이야기를 시작할 수 있어요.');
 };
+
+function renderPendingTimeChoices(){
+ const groups=new Map();for(const [index,event] of (state?.planCandidates||[]).entries())if(event.pendingTime){const key=event.pendingTime.group;if(!groups.has(key))groups.set(key,[]);groups.get(key).push({index,event});}
+ $('pendingTimeChoices').replaceChildren();$('pendingTimeChoices').hidden=!groups.size;
+ for(const items of groups.values()){
+  const {hour,minute}=items[0].event.pendingTime,label=`${hour}시${minute?' '+minute+'분':''}`;
+  const box=document.createElement('fieldset');box.className='shared-time-confirmation';const legend=document.createElement('legend');legend.textContent=`${items.length>1?items.length+'개 일정의 ':''}‘${label}’는 오전인가요, 오후인가요?`;
+  const dates=document.createElement('p');dates.className='helper';dates.textContent=items.map(({event})=>event.date?readableDate(event.date):'날짜 확인 중').join(' · ');
+  const actions=document.createElement('div');actions.className='actions';
+  for(const [period,text] of [['am','오전 '+label],['pm','오후 '+label],['unknown','시간은 아직 모르겠어요']]){
+   const button=document.createElement('button');button.className=period==='unknown'?'text-button':'secondary';button.textContent=text;button.dataset.period=period;
+   button.onclick=()=>{const time=period==='unknown'?'':`${String(hour%12+(period==='pm'?12:0)).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+    for(const {index,event} of items){event.time=time;delete event.pendingTime;const input=$(`plan-${index}-time`);if(input)input.value=time;}
+    renderPendingTimeChoices();scheduleSave();notify(period==='unknown'?'시간 미정으로 두었어요. 나중에 달력에서 고칠 수 있어요.':`${items.length}개 일정의 시간을 ${text}로 설정했어요.`);$(`plan-${items[0].index}-time`)?.focus({preventScroll:true});
+   };actions.append(button);
+  }
+  box.append(legend,dates,actions);$('pendingTimeChoices').append(box);
+ }
+}

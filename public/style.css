@@ -59,3 +59,5 @@
 .event-completion input{width:28px;min-width:28px;height:28px;min-height:28px;padding:0;margin:0;accent-color:var(--green);cursor:pointer}
 .event-card.completed{background:var(--sage)}.event-card.completed h2{text-decoration:line-through;color:var(--muted)}
 .reset-options{border-top:1px solid var(--line);margin-top:16px;padding-top:8px}.settings-panel .reset-options button{font-size:.78rem;text-align:left}
+
+.shared-time-confirmation{border:2px solid var(--green);background:var(--sage);border-radius:18px;padding:20px;margin:22px 0}.shared-time-confirmation legend{font-size:.95rem;font-weight:700;padding:0 8px}.shared-time-confirmation .actions{margin-top:14px}

@@ -1,4 +1,4 @@
-import {validDate,calendarEvent} from './calendar.js';
+import {validDate,calendarEvent,planCandidate} from './calendar.js';
 export function localDate(date=new Date()){
  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
@@ -18,4 +18,4 @@ export function restorable(value){
 
 function validEvents(events){try{return Array.isArray(events)&&events.length<=20&&events.every(e=>Boolean(calendarEvent(e)));}catch{return false;}}
 
-function validCandidates(events){return Array.isArray(events)&&events.length<=5&&events.every(e=>e&&typeof e.id==='string'&&['title','date','time','location'].every(key=>typeof e[key]==='string')&&e.title.length<=100&&e.location.length<=200);}
+function validCandidates(events){try{return Array.isArray(events)&&events.length<=5&&events.every(e=>e&&typeof e.id==='string'&&['title','date','time','location'].every(key=>typeof e[key]==='string')&&e.title.length<=100&&Boolean(planCandidate({...e,title:e.title.trim()||'확인 필요'})));}catch{return false;}}
