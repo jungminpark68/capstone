@@ -1,4 +1,4 @@
-import {calendarEvent,nextDate,localPlans,experienceTurns,temporalParts,validDate,monthDays,shiftMonth} from './calendar.js';
+import {calendarEvent,nextDate,localPlans,experienceTurns,validDate,monthDays,shiftMonth,planCandidate,futurePlanText} from './calendar.js';
 import {localReply} from './conversation.js';
 import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvents,putEvent,putEvents,removeEvent,updateEvent,resetAppData} from './storage.js';
 import {localDate,readableDate,newSession,currentImage,makeEntry,restorable} from './state.js';
@@ -196,27 +196,28 @@ async function refreshHomeSchedule(){
 }
 
 async function finishToday(turns){
- if(!experienceTurns(turns).some(t=>t.answer.trim()))throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요. 내일 일정은 다음 단계에서 따로 챙길게요.');
+ if(!experienceTurns(turns).some(t=>t.answer.trim()))throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요. 앞으로의 일정은 다음 단계에서 따로 챙길게요.');
  state.turns=turns;state.answer='';
  if(state.plansReviewed){await makeDraft(turns);return;}
- if(!state.tomorrowText)state.tomorrowText=turns.flatMap(t=>temporalParts(t.answer)).filter(a=>/내일/.test(a)).join('\n').slice(0,2000);
+ if(!state.tomorrowText)state.tomorrowText=futurePlanText(turns);
  paintTomorrow();view('tomorrow');await persist();
 }
 function paintTomorrow(){
- $('tomorrowDate').textContent=`${readableDate(nextDate(state.date))}에 할 일을 함께 챙겨볼까요?`;
+ $('tomorrowDate').textContent=`기록 날짜는 ${readableDate(state.date)}이에요. 내일·모레 또는 원하는 날짜의 할 일을 적어주세요.`;
  $('tomorrowAnswer').value=state.tomorrowText||'';
  $('planNotice').hidden=!state.planNotice;$('planNotice').textContent=state.planNotice||'';$('planDiagnostics').hidden=!state.planDiagnostic;$('planDiagnosticText').textContent=state.planDiagnostic||'';
  const saved=state.plansSaved,review=Boolean(state.planCandidates?.length)&&!saved;
  $('planSavedNote').hidden=!saved;$('planInputPanel').hidden=saved||review;
- $('tomorrowTitle').textContent=saved?'내일 일정을 챙겼어요':review?'내일 일정, 이렇게 적을까요?':'내일 하실 일이 있으세요?';$('planReviewPanel').hidden=!review;
+ $('tomorrowTitle').textContent=saved?'다가오는 일정을 챙겼어요':review?'이 일정들, 이렇게 적을까요?':'앞으로 하실 일이 있으세요?';$('planReviewPanel').hidden=!review;
  $('skipPlans').textContent=saved?'오늘 일기 만들기':'일정 등록 없이 일기 만들기';
  $('confirmPlans').hidden=false;$('existingPlans').hidden=true;
  $('planCards').replaceChildren();
  for(const [i,event] of (state.planCandidates||[]).entries()){
   const card=document.createElement('fieldset');card.className='plan-card';const legend=document.createElement('legend');legend.textContent=`${i+1}번째 일정`;card.append(legend);
+  if(!event.date){const dateNote=document.createElement('p');dateNote.className='inline-note';dateNote.textContent='날짜를 정확히 정하지 못했어요. 아래에서 날짜를 골라주세요.';card.append(dateNote);}
   if(event.inferredFromContext){const note=document.createElement('p');note.className='helper';note.textContent='앞서 나눈 이야기에서 장소를 연결했어요. 이 장소가 맞는지 확인해 주세요.';card.append(note);}
   for(const [key,label,type,max] of [['title','할 일','text',100],['date','날짜','date'],['time','시간 (모르면 비워두세요)','time'],['location','장소 (선택)','text',200]]){
-   const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);input.max=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;scheduleSave();};card.append(name,input);
+   const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;scheduleSave();};card.append(name,input);
   }
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='이 일정은 빼기';remove.onclick=()=>{state.planCandidates.splice(i,1);paintTomorrow();scheduleSave();};card.append(remove);$('planCards').append(card);
  }
@@ -224,20 +225,20 @@ function paintTomorrow(){
 $('tomorrowAnswer').oninput=()=>{state.tomorrowText=$('tomorrowAnswer').value;state.planCandidates=[];$('planReviewPanel').hidden=true;scheduleSave();};
 $('extractPlans').onclick=()=>task(async()=>{
  const result=await api('plans',{date:state.date,text:state.tomorrowText,turns:state.turns,todayEvents:state.todayEvents||[]});
- state.planCandidates=result.events.map(e=>({...calendarEvent(e),inferredFromContext:e.inferredFromContext===true,id:crypto.randomUUID()}));state.planNotice=result.notice||'';state.planDiagnostic=result.diagnostic||'';
+ state.planCandidates=result.events.map(e=>({...planCandidate(e),inferredFromContext:e.inferredFromContext===true,id:crypto.randomUUID()}));state.planNotice=result.notice||'';state.planDiagnostic=result.diagnostic||'';
  paintTomorrow();await persist();
- if(!result.events.length){$('planReviewPanel').hidden=false;$('confirmPlans').hidden=true;$('existingPlans').hidden=false;$('existingPlans').textContent='내일 일정 후보를 찾지 못했어요. 다시 적거나, 직접 일정 적기 또는 일정 등록 없이 일기 만들기를 선택해 주세요.';}
- else{ $('confirmPlans').hidden=false;const existing=(await listEvents()).filter(e=>e.date===nextDate(state.date));$('existingPlans').hidden=!existing.length;$('existingPlans').textContent=existing.length?`이미 등록된 일정: ${existing.map(e=>`${e.time||'시간 미정'} ${e.title}`).join(', ')}. 같은 일정인지 확인해 주세요.`:'';}
+ if(!result.events.length){$('planReviewPanel').hidden=false;$('confirmPlans').hidden=true;$('existingPlans').hidden=false;$('existingPlans').textContent='일정 후보를 찾지 못했어요. 다시 적거나, 직접 일정 적기 또는 일정 등록 없이 일기 만들기를 선택해 주세요.';}
+ else{ $('confirmPlans').hidden=false;const dates=new Set(state.planCandidates.map(e=>e.date));const existing=(await listEvents()).filter(e=>dates.has(e.date));$('existingPlans').hidden=!existing.length;$('existingPlans').textContent=existing.length?`이미 등록된 일정: ${existing.map(e=>`${readableDate(e.date)} ${e.time||'시간 미정'} ${e.title}`).join(', ')}. 같은 일정인지 확인해 주세요.`:'';}
  $('planReviewHeading').focus();
-},'내일 할 일을 정리하고 있어요…');
-$('manualPlan').onclick=()=>{state.planCandidates=[{id:crypto.randomUUID(),title:'',date:nextDate(state.date),time:'',location:''}];paintTomorrow();$('confirmPlans').hidden=false;$('existingPlans').hidden=true;$('plan-0-title').focus();scheduleSave();};
+},'앞으로 할 일을 날짜별로 정리하고 있어요…');
+$('manualPlan').onclick=()=>{if(state.plansSaved)return;if(state.planCandidates.length>=5){notify('일정은 한 번에 다섯 개까지 확인할 수 있어요. 나누어 등록해 주세요.',true);return;}state.planCandidates.push({id:crypto.randomUUID(),title:'',date:nextDate(state.date),time:'',location:''});paintTomorrow();$('confirmPlans').hidden=false;$('existingPlans').hidden=true;$(`plan-${state.planCandidates.length-1}-title`).focus();scheduleSave();};
 $('revisePlans').onclick=()=>{state.planCandidates=[];paintTomorrow();$('tomorrowAnswer').focus();scheduleSave();};
 $('confirmPlans').onclick=()=>task(async()=>{
  if(!state.planCandidates.length)throw new Error('확인할 일정이 없어요. 일정 없이 일기를 만들 수도 있어요.');
  const events=state.planCandidates.map(e=>({...calendarEvent(e),id:e.id,source:'conversation',savedAt:new Date().toISOString()}));
- if(events.some(e=>e.date!==nextDate(state.date)))throw new Error('내일 날짜로 확인해 주세요. 다른 날의 일정은 캘린더에서 적을 수 있어요.');
+ if(events.some(e=>e.date<=state.date))throw new Error('각 일정의 날짜를 기록 날짜 다음 날 이후로 확인해 주세요.');
  const existing=await listEvents();
- const fresh=events.filter((e,i)=>!existing.some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location)&&!events.slice(0,i).some(old=>old.title===e.title&&old.time===e.time&&old.location===e.location));
+ const fresh=events.filter((e,i)=>!existing.some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location)&&!events.slice(0,i).some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location));
  await putEvents(fresh);state.plansReviewed=true;state.plansSaved=true;paintTomorrow();await persist();await makeDraft(state.turns);
 },'확인한 일정을 저장하고 오늘 일기를 만들고 있어요…');
 $('skipPlans').onclick=()=>task(async()=>{state.plansReviewed=true;await persist();await makeDraft(state.turns);},'오늘 이야기를 일기로 정리하고 있어요…');
@@ -292,7 +293,7 @@ function paintMonth(selected,events){
    const cell=document.createElement('td');if(!date){cell.className='empty-day';row.append(cell);continue;}
    const items=byDate.get(date)||[],today=date===localDate(),button=document.createElement('button');button.className='calendar-day';button.dataset.date=date;button.tabIndex=date===selected?0:-1;
    button.setAttribute('aria-pressed',String(date===selected));if(today)button.setAttribute('aria-current','date');
-   button.setAttribute('aria-label',`${readableDate(date)}${today?' 오늘':''}, ${items.length?`일정 ${items.length}개, 완료 ${items.filter(e=>e.completed).length}개: ${items.map(e=>`${e.time||'시간 미정'} ${e.title}`).join(', ')}`:'일정 없음'}`);
+   button.setAttribute('aria-label',`${readableDate(date)}${today?' 오늘':''}, ${items.length?`일정 ${items.length}개, 완료 ${items.filter(e=>e.completed).length}개: ${items.map(e=>`${readableDate(e.date)} ${e.time||'시간 미정'} ${e.title}`).join(', ')}`:'일정 없음'}`);
    const number=document.createElement('span');number.className='day-number';number.textContent=String(Number(date.slice(-2)));button.append(number);
    if(today){const mark=document.createElement('span');mark.className='today-mark';mark.textContent='오늘';button.append(mark);}
    if(items.length){const count=document.createElement('span');count.className='day-count';count.textContent=items.every(e=>e.completed)?'✓ 완료':`● ${items.filter(e=>!e.completed).length}개`;const preview=document.createElement('span');preview.className='day-preview';preview.textContent=items[0].title;button.append(count,preview);}

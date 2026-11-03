@@ -13,7 +13,7 @@
 </header>
 <main id="main" tabindex="-1">
   <div class="topline home-topline"><span id="todayLabel"></span><span id="mode" class="mode-badge">연결 확인 중</span></div>
-  <ol id="steps" class="steps" aria-label="일기 만드는 순서" hidden><li>오늘 이야기</li><li>내일 일정</li><li>일기 확인</li><li>저장하기</li></ol>
+  <ol id="steps" class="steps" aria-label="일기 만드는 순서" hidden><li>오늘 이야기</li><li>다가오는 일정</li><li>일기 확인</li><li>저장하기</li></ol>
   <div id="workspace">
     <section id="home" class="screen" aria-labelledby="homeTitle">
       <div class="home-grid"><div class="welcome"><p class="eyebrow">나의 하루, 나의 이야기</p><h1 id="homeTitle" tabindex="-1">오늘 이야기<br>나눠볼까요?</h1><p class="lead">짧은 이야기로 오늘의 그림일기를 남겨요.</p>
@@ -43,12 +43,12 @@
     </section>
     <section id="rest" class="screen narrow rest-card" aria-labelledby="restTitle" hidden><div class="rest-symbol" aria-hidden="true">❧</div><p class="eyebrow">잠시 쉬어가는 시간</p><h1 id="restTitle" tabindex="-1">천천히 쉬었다 가요</h1><p class="lead">나눈 이야기는 이 기기에 남겨둘게요.<br>준비되면 다시 이어가면 돼요.</p><div class="actions centered"><button id="resume" class="primary">이어서 이야기하기</button><button id="restFinish" class="secondary">지금 이야기로 마무리</button></div><button id="restHome" class="text-button">처음 화면으로</button></section>
     <section id="tomorrow" class="screen narrow" aria-labelledby="tomorrowTitle" hidden>
-      <p class="eyebrow">오늘을 듣고, 내일을 챙겨요</p><h1 id="tomorrowTitle" tabindex="-1">내일 하실 일이 있으세요?</h1><p id="tomorrowDate" class="lead"></p>
-      <p class="helper">내일 계획은 오늘 일기에 들어가지 않아요. 일정은 확인하신 뒤에만 등록해요.</p>
-      <div id="planInputPanel"><label for="tomorrowAnswer">내일의 할 일</label><textarea id="tomorrowAnswer" rows="3" maxlength="2000" placeholder="예: 내일 오후 3시에 치과에 가요."></textarea><p class="helper">여러 일정은 줄을 나누어 적어주세요. 아직 정하지 않았다면 건너뛰어도 괜찮아요.</p><div class="actions"><button id="extractPlans" class="primary">일정 확인하기</button></div></div>
+      <p class="eyebrow">오늘을 듣고, 앞으로의 일을 챙겨요</p><h1 id="tomorrowTitle" tabindex="-1">앞으로 하실 일이 있으세요?</h1><p id="tomorrowDate" class="lead"></p>
+      <p class="helper">앞으로의 계획은 오늘 일기에 들어가지 않아요. 일정은 확인하신 뒤에만 등록해요.</p>
+      <div id="planInputPanel"><label for="tomorrowAnswer">앞으로의 할 일</label><textarea id="tomorrowAnswer" rows="3" maxlength="2000" placeholder="예: 내일 오전 11시에 치과, 모레 오후 2시에 은행에 가요. 11월 10일에는 친구를 만나요."></textarea><p class="helper">다른 날짜의 일정도 함께 적어주세요. 한 번에 5개까지 확인할 수 있고, 아직 정하지 않았다면 건너뛰어도 괜찮아요.</p><div class="actions"><button id="extractPlans" class="primary">일정 확인하기</button></div></div>
       <p id="planNotice" class="inline-note" role="status" hidden></p><details id="planDiagnostics" class="quiet-options" hidden><summary>일정 연결 문제 자세히 보기</summary><p id="planDiagnosticText" class="helper"></p></details><div id="planReviewPanel" hidden><h2 tabindex="-1" id="planReviewHeading">이 일정이 맞나요?</h2><p class="helper">빠진 시간과 장소를 채우거나 고칠 수 있어요. 시간은 비워두어도 괜찮아요.</p><p id="existingPlans" class="inline-note" hidden></p><div id="planCards"></div><div class="actions"><button id="confirmPlans" class="primary">맞아요, 등록하고 일기 만들기</button><button id="revisePlans" class="secondary">다시 말할게요</button></div></div>
-      <p id="planSavedNote" class="inline-note" hidden>확인한 일정을 캘린더에 저장했어요. 이제 오늘 이야기로 일기를 만들어요.</p>
-      <div class="actions"><button id="skipPlans" class="text-button">일정 등록 없이 일기 만들기</button></div><details id="tomorrowOptions" class="quiet-options"><summary>다른 방법으로 진행하기</summary><div class="actions"><button id="manualPlan" class="secondary">직접 일정 적기</button><button id="tomorrowBack" class="text-button">오늘 이야기를 더 할게요</button></div></details>
+      <p id="planSavedNote" class="inline-note" hidden>확인한 일정들을 각 날짜의 달력에 저장했어요. 이제 오늘 이야기로 일기를 만들어요.</p>
+      <div class="actions"><button id="skipPlans" class="text-button">일정 등록 없이 일기 만들기</button></div><details id="tomorrowOptions" class="quiet-options"><summary>다른 방법으로 진행하기</summary><div class="actions"><button id="manualPlan" class="secondary">직접 일정 추가하기</button><button id="tomorrowBack" class="text-button">오늘 이야기를 더 할게요</button></div></details>
     </section>
     <section id="review" class="screen narrow" aria-labelledby="reviewTitle" hidden>
       <p class="eyebrow">함께 만든 오늘의 기록</p><h1 id="reviewTitle" tabindex="-1">이렇게 남겨볼까요?</h1><p id="draftNote" class="lead">내 이야기와 맞는지 편하게 읽어보세요.</p>

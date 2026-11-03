@@ -21,7 +21,7 @@ test('캘린더 첫 질문은 예정과 실제를 구분하고 답변이 바뀌�
 });
 test('체험 일정 추출은 여러 일정과 명시된 시간만 사용한다',()=>{
  const events=localPlans({date,text:'내일 오후 3시 반에 치과에 가요. 그리고 오전 10시에 친구를 만나요.'});assert.equal(events.length,2);assert.equal(events[0].date,'2027-01-01');assert.equal(events[0].time,'15:30');assert.equal(events[1].time,'10:00');assert.equal(localPlans({date,text:'내일 밤 12시에 약 먹기'})[0].time,'00:00');
- assert.equal(localPlans({date,text:'내일 3시에 치과에 가요.'})[0].time,'');assert.deepEqual(localPlans({date,text:'내일은 아직 모르겠어요.'}),[]);assert.deepEqual(localPlans({date,text:'모레 병원에 가요.'}),[]);assert.deepEqual(localPlans({date,text:'내일 일정은 없어요.'}),[]);
+ assert.equal(localPlans({date,text:'내일 3시에 치과에 가요.'})[0].time,'');assert.deepEqual(localPlans({date,text:'내일은 아직 모르겠어요.'}),[]);assert.equal(localPlans({date,text:'모레 병원에 가요.'})[0].date,'2027-01-02');assert.deepEqual(localPlans({date,text:'내일 일정은 없어요.'}),[]);
 });
 test('내일 계획과 예정 정보는 체험 일기에서 제외한다',()=>{
  const turns=[{question:'병원 다녀오셨나요?',answer:'오늘 공원에서 산책했어요. 그리고 내일 오후 3시에 치과에 가요.'}];

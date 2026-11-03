@@ -1,4 +1,4 @@
-import {validatePlanInput,validatePlans,enrichPlans,localPlans,nextDate,experienceTurns} from './public/calendar.js';
+import {validatePlanInput,validatePlans,enrichPlans,localPlans,nextDate,experienceTurns,planDateHints} from './public/calendar.js';
 import http from 'node:http';
 import {describeApiError} from './api-errors.js';
 import {imageModel} from './model-config.js';
@@ -25,8 +25,8 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
     if(req.url==='/api/plans'){
      if(!ai)return send(200,{events:localPlans(session),mode:'local'});
      try{
-      const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date)});
-      return send(200,{events:enrichPlans(validatePlans(result.events,session.date),session.text,session),mode:'ai'});
+      const result=await chat(planPrompt,{...session,tomorrow:nextDate(session.date),dayAfterTomorrow:nextDate(session.date,2),dateHints:planDateHints(session)});
+      return send(200,{events:enrichPlans(validatePlans(result.events,session.date,session.text),session.text,session),mode:'ai'});
      }catch(e){
       return send(200,{events:localPlans(session),mode:'local',notice:'AI가 일정을 정리하지 못해 대화에서 후보를 준비했어요. 할 일·장소·시간을 확인해 주세요.',diagnostic:e.name==='TimeoutError'?'AI 응답 대기 시간을 초과했어요.':e.message?.startsWith('API ')?e.message:'AI 응답을 일정 형식으로 읽지 못했어요.'});
      }
