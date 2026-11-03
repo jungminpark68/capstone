@@ -36,11 +36,11 @@ export async function migrateLegacy(){
 export const listEvents=()=>transact('events','readonly',s=>s.getAll());
 export const putEvent=data=>transact('events','readwrite',s=>s.put(data));
 export const removeEvent=id=>transact('events','readwrite',s=>s.delete(id));
-export async function updateEvent(id,changes){
+export async function updateEvent(id,changes,{requireExisting=false}={}){
  const db=await database();return new Promise((resolve,reject)=>{
-  const tx=db.transaction('events','readwrite'),store=tx.objectStore('events');let result;
-  const request=store.get(id);request.onsuccess=()=>{result={...request.result,...changes,id};store.put(result);};
-  tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 수정하지 못했어요.'));
+  const tx=db.transaction('events','readwrite'),store=tx.objectStore('events');let result,missing=false;
+  const request=store.get(id);request.onsuccess=()=>{if(requireExisting&&!request.result){missing=true;tx.abort();return;}result={...request.result,...changes,id};store.put(result);};
+  tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(missing?new Error('다른 창에서 지운 일정이에요. 달력을 다시 열어주세요.'):tx.error||new Error('일정을 수정하지 못했어요.'));
  });
 }
 export async function resetAppData(){
@@ -54,5 +54,13 @@ export async function resetAppData(){
  for(const key of ['memory-diary-v2','memory-diary-large-type'])try{localStorage.removeItem(key);}catch{}
 }
 export async function putEvents(events){
- const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction('events','readwrite');for(const event of events)tx.objectStore('events').put(event);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 저장하지 못했어요.'));});
+ const db=await database();return new Promise((resolve,reject)=>{
+  const tx=db.transaction('events','readwrite'),store=tx.objectStore('events');let added=0;
+  // Read and write in one transaction so another tab cannot race this check.
+  const request=store.getAll();request.onsuccess=()=>{
+   const existing=request.result;
+   for(const event of events){if(existing.some(old=>old.date===event.date&&old.title===event.title&&old.time===event.time&&old.location===event.location))continue;store.put(event);existing.push(event);added++;}
+  };
+  tx.oncomplete=()=>resolve(added);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('일정을 저장하지 못했어요.'));
+ });
 }

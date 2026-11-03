@@ -7,7 +7,7 @@ const $=id=>document.getElementById(id);
 const screens=['home','photos','conversation','rest','tomorrow','review','result','done','history','detail','calendar'];
 const writing=new Set(['photos','conversation','rest','tomorrow','review','result']);
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
-let calendarReturn='home',editingEventId=null;
+let calendarReturn='home',editingEventId=null,editingExisting=false;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
 resetHomeDate();
 function notify(message,error=false,detail=''){
@@ -107,9 +107,10 @@ async function makeDraft(turns){
  $('draftNote').textContent=response.mode==='ai'?'내 이야기와 맞는지 편하게 읽어보세요.':'말씀해주신 이야기를 모았어요. 원하는 표현으로 고칠 수 있어요.';paintReview();view('review');await persist();
 }
 function advance({skip=false,finish=false}={}){
+ if(busy)return;
+ const answer=skip?'':state.answer.trim(),turns=[...state.turns,{question:state.question,answer}];
  task(async()=>{
- const answer=skip?'':state.answer.trim();if(!skip&&!finish&&!answer)throw new Error('짧게 적어도 좋아요. 답하기 어려우면 ‘다른 이야기 할래요’를 눌러주세요.');
- const turns=[...state.turns,{question:state.question,answer}];
+ if(!skip&&!finish&&!answer)throw new Error('짧게 적어도 좋아요. 답하기 어려우면 ‘다른 이야기 할래요’를 눌러주세요.');
  if(finish||turns.length>=6){await finishToday(turns);return;}
  const response=await api('question',sessionInput(turns));
  if(response.ready){await finishToday(turns);return;}
@@ -219,6 +220,7 @@ function paintTomorrow(){
   for(const [key,label,type,max] of [['title','할 일','text',100],['date','날짜','date'],['time','시간 (모르면 비워두세요)','time'],['location','장소 (선택)','text',200]]){
    const id=`plan-${i}-${key}`,name=document.createElement('label'),input=document.createElement('input');name.htmlFor=id;name.textContent=label;input.id=id;input.type=type;input.value=event[key];if(max)input.maxLength=max;if(key==='date'){input.min=nextDate(state.date);}input.oninput=()=>{event[key]=input.value;if(key==='time')delete event.pendingTime;if(key==='time'||key==='date')renderPendingTimeChoices();scheduleSave();};card.append(name,input);
   }
+  if(event.scheduleNote){const name=document.createElement('label'),note=document.createElement('textarea');name.htmlFor=`plan-${i}-note`;name.textContent='확인 메모 (고칠 수 있어요)';note.id=name.htmlFor;note.rows=3;note.maxLength=300;note.value=event.scheduleNote;note.oninput=()=>{event.scheduleNote=note.value;scheduleSave();};card.append(name,note);}
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='이 일정은 빼기';remove.onclick=()=>{state.planCandidates.splice(i,1);paintTomorrow();scheduleSave();};card.append(remove);$('planCards').append(card);
  }
  renderPendingTimeChoices();
@@ -239,9 +241,7 @@ $('confirmPlans').onclick=()=>task(async()=>{
  if(state.planCandidates.some(e=>e.pendingTime))throw new Error('말씀하신 시간이 오전인지 오후인지 확인해 주세요. 아직 모르면 ‘시간은 아직 모르겠어요’를 선택할 수 있어요.');
  const events=state.planCandidates.map(e=>({...calendarEvent(e),id:e.id,source:'conversation',savedAt:new Date().toISOString()}));
  if(events.some(e=>e.date<=state.date))throw new Error('각 일정의 날짜를 기록 날짜 다음 날 이후로 확인해 주세요.');
- const existing=await listEvents();
- const fresh=events.filter((e,i)=>!existing.some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location)&&!events.slice(0,i).some(old=>old.date===e.date&&old.title===e.title&&old.time===e.time&&old.location===e.location));
- await putEvents(fresh);state.plansReviewed=true;state.plansSaved=true;paintTomorrow();await persist();await makeDraft(state.turns);
+ await putEvents(events);state.plansReviewed=true;state.plansSaved=true;paintTomorrow();await persist();await makeDraft(state.turns);
 },'확인한 일정을 저장하고 오늘 일기를 만들고 있어요…');
 $('skipPlans').onclick=()=>task(async()=>{state.plansReviewed=true;await persist();await makeDraft(state.turns);},'오늘 이야기를 일기로 정리하고 있어요…');
 function backToToday(){const last=state.turns.pop();if(last){state.question=last.question;state.answer=last.answer;}paintConversation();notify('');view('conversation');persist();}
@@ -260,16 +260,17 @@ async function renderCalendar(){
   const card=document.createElement('article');card.className=event.completed?'event-card completed':'event-card';const h=document.createElement('h2');h.textContent=event.title;const p=document.createElement('p');p.textContent=`${event.time||'시간 미정'}${event.location?' · '+event.location:''}`;
   const completion=document.createElement('label');completion.className='event-completion';const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id=`complete-${event.id}`;checkbox.checked=event.completed===true;checkbox.setAttribute('aria-label',`${event.title} 완료 표시`);
   const status=document.createElement('span');status.textContent=event.completed?'완료했어요':'완료로 표시';completion.append(checkbox,status);
-  checkbox.onchange=async()=>{const completed=checkbox.checked;let updated=false;await task(async()=>{await updateEvent(event.id,{completed,completedAt:completed?new Date().toISOString():null});updated=true;await renderCalendar();await refreshHomeSchedule();},completed?'완료로 표시하고 있어요…':'완료 표시를 해제하고 있어요…');if(!updated&&checkbox.isConnected)checkbox.checked=event.completed===true;document.getElementById(`complete-${event.id}`)?.focus({preventScroll:true});};
+  checkbox.onchange=async()=>{const completed=checkbox.checked;let updated=false;await task(async()=>{await updateEvent(event.id,{completed,completedAt:completed?new Date().toISOString():null},{requireExisting:true});updated=true;await renderCalendar();await refreshHomeSchedule();},completed?'완료로 표시하고 있어요…':'완료 표시를 해제하고 있어요…');if(!updated&&checkbox.isConnected)checkbox.checked=event.completed===true;document.getElementById(`complete-${event.id}`)?.focus({preventScroll:true});};
   const manage=document.createElement('details');manage.className='event-manage';const summary=document.createElement('summary');summary.textContent='고치기 · 삭제';manage.append(summary);
   const actions=document.createElement('div');actions.className='actions';const edit=document.createElement('button');edit.className='secondary';edit.textContent='일정 고치기';edit.onclick=()=>editEvent(event);
   const remove=document.createElement('button');remove.className='text-button danger';remove.textContent='일정 삭제';remove.onclick=async()=>{if(!await ask('이 일정을 지울까요?',`${event.title} 일정을 캘린더에서 삭제해요.`,'일정 삭제'))return;await task(async()=>{await removeEvent(event.id);await renderCalendar();await refreshHomeSchedule();},'일정을 정리하고 있어요…');};
-  actions.append(edit,remove);manage.append(actions);card.append(h,p,completion,manage);$('calendarEvents').append(card);
+  actions.append(edit,remove);manage.append(actions);card.append(h,p);if(event.scheduleNote){const note=document.createElement('p');note.className='helper';note.textContent=event.scheduleNote;card.append(note);}card.append(completion,manage);$('calendarEvents').append(card);
  }
 }
 function editEvent(event=null){
- editingEventId=event?.id||crypto.randomUUID();$('calendarOverview').hidden=true;$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
+ editingEventId=event?.id||crypto.randomUUID();editingExisting=Boolean(event);$('calendarOverview').hidden=true;$('eventForm').hidden=false;$('eventFormHeading').textContent=event?'일정 고치기':'일정 적기';
  for(const [id,key] of [['eventTitle','title'],['eventDate','date'],['eventTime','time'],['eventLocation','location']])$(id).value=event?.[key]||(key==='date'?$('calendarDate').value:'');
+ $('eventNote').value=event?.scheduleNote||'';$('eventNoteFields').hidden=!event?.scheduleNote;
  $('eventTitle').focus();
 }
 $('calendarButton').onclick=showCalendar;
@@ -277,8 +278,8 @@ $('calendarDate').onchange=()=>selectCalendarDate($('calendarDate').value);
 for(const [id,days] of [['calendarPrev',-1],['calendarNext',1],['calendarToday',0]])$(id).onclick=()=>task(async()=>{$('calendarDate').value=days?shiftMonth($('calendarDate').value,days):localDate();$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();},'일정을 살펴보고 있어요…');
 $('addCalendarEvent').onclick=()=>editEvent();$('cancelEvent').onclick=()=>{$('eventForm').hidden=true;$('calendarOverview').hidden=false;$('addCalendarEvent').focus();};
 $('eventForm').onsubmit=event=>{event.preventDefault();task(async()=>{
- const data=calendarEvent({title:$('eventTitle').value,date:$('eventDate').value,time:$('eventTime').value,location:$('eventLocation').value});
- await updateEvent(editingEventId,{...data,source:'manual',savedAt:new Date().toISOString()});$('calendarDate').value=data.date;$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();await refreshHomeSchedule();
+ const data=calendarEvent({title:$('eventTitle').value,date:$('eventDate').value,time:$('eventTime').value,location:$('eventLocation').value,scheduleNote:$('eventNote').value});
+ await updateEvent(editingEventId,{...data,source:'manual',savedAt:new Date().toISOString()},{requireExisting:editingExisting});$('calendarDate').value=data.date;$('eventForm').hidden=true;$('calendarOverview').hidden=false;await renderCalendar();await refreshHomeSchedule();
 },'일정을 저장하고 있어요…');};
 $('calendarReturn').onclick=()=>{notify('');view(calendarReturn);};
 
