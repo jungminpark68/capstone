@@ -7,6 +7,8 @@
 - **[소개 중심 PPT](memory_connect_intro_7min.pptx)**
 - [PDF 미리보기](memory_connect_intro_7min.pdf)
 - [전체 슬라이드 미리보기](memory_connect_intro_preview.png)
+- **[다듬은 발표 대본 PDF — 시간 표시 없음](memory_connect_speaker_script.pdf)**
+- [대본 수정용 Word](memory_connect_speaker_script.docx)
 - [7분 발표 대본](memory_connect_intro_script.md)
 - [공학인증 요건 점검표·화면 출처](memory_connect_intro_requirements.md)
 - [최신 파일 전체 ZIP](memory_connect_presentation.zip)
