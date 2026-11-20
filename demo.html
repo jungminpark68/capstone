@@ -75,7 +75,7 @@
 @media(max-width:680px){.experience-rating{padding:19px 16px}.rating-stars{gap:6px}.rating-stars button{width:48px;min-height:56px}.event-choice{padding:16px}.dialogue-turn{padding:14px}.scene-confirm{align-items:flex-start}}
 </style>
 <style>.phone-nav{max-width:1120px;margin:0 auto;padding:14px 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-family:"Malgun Gothic",system-ui,sans-serif;border-bottom:1px solid #dce3d5}.phone-nav a{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:8px 15px;background:#fffefa;color:#315d49;border:1px solid #b9cbb7;border-radius:10px;text-decoration:none;font-size:15px;font-weight:700}.phone-nav .active{background:#315d49;color:white}.phone-note{max-width:1120px;margin:0 auto;padding:12px 20px;background:#edf3e7;color:#53694a;font:14px/1.7 "Malgun Gothic",system-ui,sans-serif}@media(max-width:450px){.phone-nav{padding:12px 16px;gap:7px}.phone-nav a{flex:1;font-size:14px;padding:8px 10px}.phone-note{padding:12px 16px}}</style></head>
-<body><nav class="phone-nav" aria-label="체험 화면 선택"><a href="./">완성된 그림일기 예시</a><a class="active" href="demo.html">대화·사건 선택 체험</a></nav><p class="phone-note">휴대폰 체험판 · 대화, 사건 선택, 부족한 정보 확인, 글 저장을 체험할 수 있어요. 새로운 AI 그림 생성은 서버 연결이 필요해요. 완성된 색연필 그림은 위의 예시에서 볼 수 있어요.</p>
+<body><nav class="phone-nav" aria-label="체험 화면 선택"><a href="index.html">완성된 그림일기 예시</a><a class="active" href="demo.html">대화·사건 선택 체험</a></nav><p class="phone-note">휴대폰 체험판 · 가상 이야기로 체험해 주세요. 대화, 사건 선택, 부족한 정보 확인, 글 저장을 체험할 수 있어요. 새로운 AI 그림 생성은 서버 연결이 필요해요. 완성된 색연필 그림은 위의 예시에서 볼 수 있어요.</p>
 <a class="skip-link" href="#main">본문으로 바로가기</a>
 <header class="site-header">
   <button id="homeButton" class="brand" aria-label="기억잇다 첫 화면"><span class="brand-mark" aria-hidden="true">✿</span><span>기억잇다<small>오늘을 담는 작은 일기장</small></span></button>
@@ -152,7 +152,7 @@
   </div>
   <div id="feedback" class="feedback" role="status" aria-live="polite" hidden><span id="busySpinner" class="spinner" aria-hidden="true" hidden></span><div><p id="status"></p><p id="busyHint" class="helper" hidden>화면을 닫지 않고 잠시 기다려주세요. 이야기는 그대로 있어요.</p><details id="errorDetails" hidden><summary>연결 오류 자세히 보기</summary><p id="errorText"></p></details><button id="retry" class="secondary compact" hidden>다시 시도하기</button></div></div>
   <p id="autosaveStatus" class="autosave" role="status" aria-live="polite"></p>
-  <footer><p>이야기는 점수로 매기지 않아요.<br>당신의 속도로, 편안하게 남겨주세요.</p><details><summary>저장과 음성 기능 안내</summary><p>작성 중인 이야기와 일기, 캘린더 일정은 이 브라우저에 저장돼요. 공용 기기에서는 사용에 주의해 주세요. 브라우저 데이터를 지우면 기록이 사라질 수 있어요.</p><p>AI 연결 시 사진과 대화, 대화에 참고하는 일정이 외부 AI 서비스로 전달돼요. 마이크는 버튼을 눌러야 켜지며, 브라우저의 음성 인식 서비스를 사용해요. 가족 목소리 합성 기능은 아직 제공하지 않아요.</p><p><a href="/verification">그림 검증 체험 (연구용) ↗</a></p><p id="connectionInfo"></p><button id="clearDraft" class="text-button">작성 중인 이야기 지우기</button></details></footer>
+  <footer><p>이야기는 점수로 매기지 않아요.<br>당신의 속도로, 편안하게 남겨주세요.</p><details><summary>저장과 음성 기능 안내</summary><p>작성 중인 이야기와 일기, 캘린더 일정은 이 브라우저에 저장돼요. 공용 기기에서는 사용에 주의해 주세요. 브라우저 데이터를 지우면 기록이 사라질 수 있어요.</p><p>AI 연결 시 사진과 대화, 대화에 참고하는 일정이 외부 AI 서비스로 전달돼요. 마이크는 버튼을 눌러야 켜지며, 브라우저의 음성 인식 서비스를 사용해요. 가족 목소리 합성 기능은 아직 제공하지 않아요.</p><p><a href="verification-demo.html">그림 검증 체험 (연구용) ↗</a></p><p id="connectionInfo"></p><button id="clearDraft" class="text-button">작성 중인 이야기 지우기</button></details></footer>
 </main>
 <dialog id="confirmDialog"><form method="dialog"><h2 id="confirmTitle"></h2><p id="confirmBody"></p><div class="actions"><button value="cancel" class="secondary" autofocus>돌아가기</button><button id="confirmAction" value="confirm" class="primary">확인</button></div></form></dialog>
 <script>// One confirmed scene is the shared input to matching, generation and checking.
@@ -899,7 +899,7 @@ function validEvents(events){try{return Array.isArray(events)&&events.length<=20
 function validCandidates(events){try{return Array.isArray(events)&&events.length<=5&&events.every(e=>e&&typeof e.id==='string'&&['title','date','time','location'].every(key=>typeof e[key]==='string')&&e.title.length<=100&&Boolean(planCandidate({...e,title:e.title.trim()||'확인 필요'})));}catch{return false;}}
 
 const STANDALONE=true;
-if(STANDALONE)document.querySelectorAll('a[href="/verification"]').forEach(link=>link.href='verification-demo.html');
+if(STANDALONE)document.querySelectorAll('a[href="verification-demo.html"]').forEach(link=>link.href='verification-demo.html');
 const $=id=>document.getElementById(id);
 const screens=['home','photos','conversation','rest','tomorrow','review','result','done','history','detail','calendar'];
 const writing=new Set(['photos','conversation','rest','tomorrow','review','result']);
