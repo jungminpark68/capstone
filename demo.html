@@ -657,23 +657,43 @@ function contextOf(turns) {
   return {text,hasStory:turns.some(t=>t.answer.trim()),
     company:/혼자|딸|아들|친구|남편|아내|가족|손주|손녀|손자|동생|언니|누나|형|오빠|부부|이웃|어머니|아버지|같이|함께/.test(text),
     feeling:/기분|행복|즐거|즐겁|좋았|좋아|좋더|뿌듯|편안|편했|속상|슬펐|슬프|외로|쓸쓸|고마|감사|재밌|재미있|기뻤|기쁘|신났|불안|걱정|아쉬/.test(text),
-    detail:/꽃|나무|바람|햇살|햇빛|새소리|이야기|대화|장미|벚꽃|김치|국수|비빔밥|찌개|불고기|커피|빵|책을|책이|독서|영화|노래|맛있|맛없/.test(text),
-    activity:/산책|공원|걷|걸었|먹|식사|음식|밥|요리|만들|갔|다녀|만났|봤|보았|읽|청소|쉬었|쉬고|운동|시장|병원|집에서|집에/.test(text),
+    detail:/처음|특히\s*기억|보조바퀴|꽃|나무|바람|햇살|햇빛|새소리|이야기|대화|장미|벚꽃|김치|국수|비빔밥|찌개|불고기|커피|빵|책을|책이|독서|영화|노래|맛있|맛없/.test(text),
+    activity:/자전거|산책|공원|걷|걸었|먹|식사|음식|밥|요리|만들|갔|다녀|만났|봤|보았|읽|청소|쉬었|쉬고|운동|시장|병원|집에서|집에/.test(text),
     stop:/쉬고 싶|그만|여기까지|피곤|지쳤|기억 안|기억이 안|모르겠|생각이 안/.test(turns.at(-1)?.answer||'')};
+}
+function followupFacts(turns){
+ const actual=experienceTurns(turns),events=localExperienceEvents({turns:actual}),preference=preferredExperience(events,actual);
+ return {actual,events,preference,focus:preference?events.find(e=>e.id===preference.eventId):events.length===1?events[0]:null};
+}
+function followupIssue(turns,question,facts=followupFacts(turns)){
+ const normalized=text=>text.replace(/[\s.,?!。]/g,'');
+ if(turns.some(turn=>normalized(turn.question)===normalized(question)))return 'repeated_question';
+ const field=experienceQuestionField(question,facts.focus);
+ if(field&&facts.focus?.collectionStatus[field]&&facts.focus.collectionStatus[field]!=='not_asked')return 'already_recorded';
+ if(field&&turns.some(turn=>experienceQuestionField(turn.question,facts.focus)===field))return 'already_asked';
+ if(/걸으|걷|산책/.test(question)&&!facts.actual.some(turn=>/산책|걷|걸었|걸으/.test(turn.answer)))return 'unreported_walking';
+ return null;
+}
+function filterFollowup(session,result){
+ if(result.ready||result.rest)return result;
+ const issue=followupIssue(session.turns,result.question);
+ return issue?{...localReply(session),filteredQuestionReason:issue}:result;
 }
 function localReply({turns,photos=[],todayEvents=[]}) {
   const guarded=conversationGuard({turns});if(guarded)return guarded;
   const c=contextOf(turns);
   const pending=todayEvents.filter(e=>e.completed!==true);
   if(!turns.length)return {question:MEMORABLE_OPENING+(photos.length?' 고르신 사진을 보며 떠올려도 좋아요.':''),ready:false};
+  const facts=followupFacts(turns);
+  if(facts.preference||facts.events.length>1)return {question:facts.preference?'남기고 싶다고 말씀하신 이야기로 일기를 준비할게요.':'들려주신 이야기 중 그림으로 남길 한 가지를 함께 골라볼게요.',ready:true,selectionReady:true};
   if(c.stop)return c.hasStory&&turns.some(t=>t.answer.trim()&&!/쉬고 싶|그만|여기까지|피곤|지쳤|기억.*안|모르겠/.test(t.answer))?{question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true}:{question:'괜찮아요. 잠시 쉬었다가 이어가도 좋아요.',ready:false,rest:true};
   if(c.hasStory&&((c.activity&&c.feeling&&(c.detail||c.text.length>=30))||turns.length>=6))return {question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true};
   const choices=[];
-  if(!c.detail){if(/산책|공원|걷|걸었/.test(c.text))choices.push('걸으면서 무엇이 가장 눈에 들어오셨나요?');else if(/먹|식사|음식|밥/.test(c.text))choices.push('어떤 음식을 드셨나요?');else if(/시장|장보|장 봤/.test(c.text))choices.push('시장에서 무엇을 보고 오셨나요?');}
+  if(!c.detail){if(/산책|걷|걸었/.test(c.text))choices.push('걸으면서 무엇이 가장 눈에 들어오셨나요?');else if(/먹|식사|음식|밥/.test(c.text))choices.push('어떤 음식을 드셨나요?');else if(/시장|장보|장 봤/.test(c.text))choices.push('시장에서 무엇을 보고 오셨나요?');}
   if(c.hasStory&&!c.feeling)choices.push('그 시간을 보내고 나니 기분이 어떠셨어요?');
   if(!c.activity)choices.push('오늘 하신 일 중 한 가지만 편하게 들려주시겠어요?');
   if(!c.detail)choices.push('그때 기억에 남는 것이 하나 있었나요?');
-  const question=choices.find(q=>!turns.some(t=>t.question===q));
+  const question=choices.find(q=>!followupIssue(turns,q,facts));
   if(question)return {question,ready:false};
   return c.hasStory?{question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true}:{question:'답하기 어려우면 잠시 쉬어도 괜찮아요.',ready:false,rest:true};
 }
@@ -789,6 +809,7 @@ const flowText=(value,max=200)=>typeof value==='string'?value.trim().slice(0,max
 const flowClone=value=>JSON.parse(JSON.stringify(value));
 const flowSubject=name=>{const last=name.codePointAt(name.length-1);return name+(last>=44032&&last<=55203?(last-44032)%28?'은':'는':'은(는)');};
 const flowPlaceTypes={공원:'park',집:'home',식당:'restaurant',레스토랑:'restaurant',카페:'restaurant',병원:'hospital',치과:'hospital',의원:'hospital',시장:'market',마트:'market',거리:'street',은행:'other',복지관:'other',도서관:'other'};
+const flowKinPattern=/손녀|손자|며느리|사위|남편|아내|친구|딸|아들|의사\s*선생님/g;
 const flowPlacePattern=/(?:[가-힣A-Za-z0-9·-]{0,14})?(?:공원|병원|치과|의원|시장|마트|식당|레스토랑|카페|은행|복지관|도서관|집)(?=에서|에(?:는|서|도|\s)|을|를|이요|이에요|$)/g;
 function flowPlace(text){const name=[...text.matchAll(flowPlacePattern)][0]?.[0]||'';return {id:'',name,type:Object.entries(flowPlaceTypes).find(([suffix])=>name.endsWith(suffix))?.[1]||'unknown'};}
 function flowTime(text){return /오전|아침/.test(text)?'morning':/오후|점심|낮/.test(text)?'afternoon':/저녁/.test(text)?'evening':/밤/.test(text)?'night':'unknown';}
@@ -804,47 +825,158 @@ function flowActivity(text){
  return '';
 }
 
+function flowEventScore(text,event){
+ let score=0;
+ if(event.place?.name&&text.includes(event.place.name))score+=5;
+ const activity=flowActivity(text);if(activity&&activity===event.activity)score+=4;
+ for(const person of event.people||[])if(person.name!=='나'&&text.includes(person.name))score+=2;
+ return score;
+}
+function flowUniqueEvent(text,events){
+ const ranked=events.map(event=>({event,score:flowEventScore(text,event)})).sort((a,b)=>b.score-a.score);
+ return ranked[0]?.score>0&&ranked[0].score!==(ranked[1]?.score||0)?ranked[0].event:null;
+}
+function preferredExperience(events,turns){
+ for(const [index,turn] of [...turns.entries()].reverse()){
+  const text=turn.answer||'';
+  if(/그리지\s*마|남기지\s*마|다른\s*(?:이야기|사건|장면)(?:로|으로)\s*(?:바꿀|바꾸|할래)/.test(text))return null;
+  if(!/남기고\s*싶|남길래|남겨\s*주|그려\s*주|그림일기로\s*(?:만들|할래)|(?:이야기|사건|장면)(?:을|를|으로|로)\s*선택/.test(text))continue;
+  if(/남기고\s*싶지|남기기\s*싫|둘\s*다|모두/.test(text))return null;
+  const event=flowUniqueEvent(text,events);return event?{eventId:event.id,question:turn.question,answer:text,turnIndex:index}:null;
+ }
+ return null;
+}
+
+function experienceQuestionField(question,record){
+ if(/그림일기로.*남기고\s*싶은|오늘.*어떤\s*일|다른.*(?:이야기|들려)/.test(question))return null;
+ if(/기분|감정|어떤\s*마음|마음(?:이|은|는)?.*(?:어떠|어땠|어떤)|어떤\s*느낌|어떻게\s*느끼|어떻게\s*느꼈/.test(question))return 'emotion';
+ if(/언제|시간대|아침.*오후|몇\s*시/.test(question))return 'time';
+ if(/누구|함께한\s*분|혼자.*함께/.test(question))return 'people';
+ if(/어디|어느\s*장소/.test(question))return 'place';
+ if(/기억.*(?:순간|것이|일이)|특별.*순간/.test(question))return 'memoryCue';
+ if(/물건|어떤\s*음식|사물/.test(question))return 'objects';
+ if(/무엇|뭘|무슨\s*일|어떤\s*일/.test(question)){
+  const person=record?.people.find(p=>p.name!=='나'&&question.includes(p.name));
+  if(person)return `action:${person.id}`;
+  if(/그때.*(?:하|하고)|무엇을\s*하고/.test(question))return 'action:person-self';
+ }
+ return null;
+}
+
+function flowPersonActions(text,people){
+ const result=new Map();
+ // A named subject is required: accompanying someone does not prove who rode.
+ const subjects=[...text.matchAll(/(?:^|[\s.!?。])(?:(나|저)(?:는|가|도)|제가|나는|내가|저는|(손녀|손자|며느리|사위|남편|아내|친구|딸|아들|의사\s*선생님)(?:은|는|이|가|도))\s*/g)];
+ for(const [index,subject] of subjects.entries()){
+  const name=subject[2]||'나';if(!people.some(person=>person.name===name))continue;
+  const action=text.slice(subject.index+subject[0].length,subjects[index+1]?.index??text.length).split(/[.!?。\n]/)[0].trim();
+  if(!/탔|타고|타는|탄\s|타면서|걸었|걷|산책|앉|응원|손뼉|박수|먹었|먹고|마셨|마시|진료|검진|읽었|읽고|뛰|달렸|놀았|놀고|이야기했|대화했|요리|만들었|장보기/.test(action))continue;
+  if(/않|못했|안\s*(?:탔|타|먹|갔|했)/.test(action))continue;
+  result.set(name,flowText(action,200));
+ }
+ return result;
+}
+
+// The input here is a scoped user utterance, never an AI scene or question.
+// Fill other explicit facts in the same answer as well as the requested field.
+function supplementExperience(value,answer,{question=''}={}){
+ const r=prepareExperience(value),text=flowText(answer,2000),s=r.collectionStatus;
+ const fillable=field=>s[field]==='not_asked';
+ const names=[...new Set(text.match(flowKinPattern)||[])];
+ for(const name of names)if(!r.people.some(person=>person.name===name)&&r.people.length<6&&!['none','unknown','declined'].includes(s.people)){
+  const index=r.people.length,person={id:flowId('person'),alias:String.fromCharCode(65+index),name,action:'',visual:`${['파란색','노란색','초록색','보라색','주황색','분홍색'][index]} 상의 (그림 구별용 설정)`};
+  r.people.push(person);s[`action:${person.id}`]='not_asked';
+ }
+ if(fillable('people')&&(/혼자/.test(text)&&!names.length||names.length))s.people='provided';
+ const activity=flowActivity(text);if(fillable('activity')&&activity){r.activity=activity;s.activity='provided';}
+ const place=flowPlace(text);if(fillable('place')&&place.type!=='unknown'){r.place=place;s.place='provided';}
+ const time=flowTime(text);if(fillable('time')&&time!=='unknown'){r.timeOfDay=time;s.time='provided';}
+ const actions=flowPersonActions(text,r.people);
+ for(const person of r.people)if(fillable(`action:${person.id}`)&&actions.has(person.name)){person.action=actions.get(person.name);s[`action:${person.id}`]='provided';}
+ if(r.people.length===1&&activity&&fillable('action:person-self')){r.people[0].action=activity;s['action:person-self']='provided';}
+ const objects=[...new Set(text.match(/자전거|벤치|안전모|헬멧|케이크|꽃|책|커피|국수|사과|빵/g)||[])];
+ if(!['none','unknown','declined'].includes(s.objects)&&objects.length){
+  for(const name of objects)if(!r.objects.some(object=>object.name===name)&&r.objects.length<6)r.objects.push({id:`object-${r.objects.length+1}`,name,count:null});
+  s.objects='provided';
+ }
+ const labels=flowEmotion(text);
+ if(fillable('emotion')&&labels.length){const feelingText=text.split(/(?<=[.!?。])\s*|\n/).filter(part=>flowEmotion(part).length).join(' ');r.emotion={text:feelingText||text,labels,status:'provided'};s.emotion='provided';}
+ const cue=text.split(/(?<=[.!?。])\s*/).find(part=>/처음|가장\s*기억|특히\s*기억|인상\s*깊/.test(part)&&!flowRefusal(part));
+ if(fillable('memoryCue')&&cue){r.memoryCue=flowText(cue,300);r.memoryCueStatus='provided';s.memoryCue='provided';}
+ if(fillable('topic')&&r.activity){r.topic=r.activity;r.topicSource='derived_from_activity';s.topic='provided';}
+ const field=experienceQuestionField(question,r),refusal=flowRefusal(text);
+ if(field&&fillable(field)&&text&&!/^(?:네|예|맞아요|그래요)[.!。]?$/.test(text)){
+  if(refusal){
+   const status=refusal==='none'&&!['objects','people','memoryCue'].includes(field)?'unknown':refusal;
+   s[field]=status;
+   if(field==='emotion')r.emotion={text:'',labels:[],status};
+   if(field==='memoryCue'){r.memoryCue='';r.memoryCueStatus=status;}
+  }else if(field==='emotion'){r.emotion={text,labels,status:'provided'};s.emotion='provided';}
+  else if(field==='memoryCue'){r.memoryCue=flowText(text,300);r.memoryCueStatus='provided';s.memoryCue='provided';}
+  else if(field.startsWith('action:')&&!actions.size){const person=r.people.find(p=>p.id===field.slice(7));if(person){person.action=flowText(text,200);s[field]='provided';}}
+ }
+ if(text&&!r.sourceEvidence.quotes.includes(text)&&r.sourceEvidence.quotes.length<80)r.sourceEvidence.quotes.push(text);
+ return r;
+}
+
 function prepareExperience(value){
  const r=flowClone(value),statuses={...(r.collectionStatus||{})};
  r.people=Array.isArray(r.people)&&r.people.length?r.people:[{id:'person-self',alias:'A',name:'나',action:'',visual:'파란색 상의 (그림 구별용 설정)'}];
  r.objects=Array.isArray(r.objects)?r.objects:[];r.place=r.place||{id:'',name:'',type:'unknown'};
  r.topic=flowText(r.topic||r.activity,200);r.topicSource=r.topicSource||(r.topic?'derived_from_activity':'not_collected');
  r.emotion=r.emotion||{text:'',labels:[],status:'not_asked'};
- const defaults={activity:r.activity?'provided':'not_asked',place:r.place.type!=='unknown'?'provided':'not_asked',people:r.people.length>1?'provided':'not_asked',time:r.timeOfDay!=='unknown'?'provided':'not_asked',objects:r.objects.length?'provided':'not_asked',topic:r.topic?'provided':'not_asked',emotion:r.emotion.status||'not_asked',memoryCue:r.memoryCueStatus||'not_asked'};
+ const defaults={activity:r.activity?'provided':'not_asked',place:r.place.type!=='unknown'?'provided':'not_asked',people:r.people.length>1?'provided':'not_asked',time:['morning','afternoon','evening','night'].includes(r.timeOfDay)?'provided':'not_asked',objects:r.objects.length?'provided':'not_asked',topic:r.topic?'provided':'not_asked',emotion:r.emotion.status||'not_asked',memoryCue:r.memoryCueStatus||'not_asked'};
  for(const [key,status] of Object.entries(defaults))if(!FLOW_STATUSES.includes(statuses[key])||statuses[key]==='not_asked'&&status==='provided')statuses[key]=status;
- for(const person of r.people){const key=`action:${person.id}`;if(!FLOW_STATUSES.includes(statuses[key]))statuses[key]=person.action?'provided':'not_asked';}
- r.collectionStatus=statuses;r.sourceEvidence=r.sourceEvidence||{quotes:[]};r.sourceEvidence.answers=r.sourceEvidence.answers||[];
+ for(const person of r.people){const key=`action:${person.id}`;if(!FLOW_STATUSES.includes(statuses[key])||statuses[key]==='not_asked'&&person.action)statuses[key]=person.action?'provided':'not_asked';}
+ r.collectionStatus=statuses;r.sourceEvidence=r.sourceEvidence||{quotes:[]};r.sourceEvidence.quotes=Array.isArray(r.sourceEvidence.quotes)?r.sourceEvidence.quotes:[];r.sourceEvidence.answers=r.sourceEvidence.answers||[];
  r.importanceRating=r.importanceRating??null;r.importanceStatus=r.importanceStatus||'not_asked';
  return r;
 }
 
 function localExperienceEvents(session){
- const turns=experienceTurns(session.turns||[]),events=[];
+ const turns=experienceTurns(session.turns||[]),events=[];let focusedId=null;
  for(const [turnIndex,turn] of turns.entries()){
-  const text=turn.answer.trim();if(!text||flowRefusal(text)&&!flowActivity(text)&&flowPlace(text).type==='unknown')continue;
-  const marks=[...text.matchAll(flowPlacePattern)];
-  const pieces=[];
-  if(marks.length>1){
-   let start=0;
-   for(let i=1;i<marks.length;i++){
-    if(marks[i][0]===marks[i-1][0])continue;
-    let boundary=marks[i].index;
-    const before=text.slice(start,boundary),prefix=before.match(/(?:그리고\s*)?(?:(?:오전|오후|아침|저녁|밤)(?:에는?|에|은|는)?\s*)$/);
-    if(prefix)boundary-=prefix[0].length;
-    pieces.push(text.slice(start,boundary));start=boundary;
-   }
-   pieces.push(text.slice(start));
-  }else pieces.push(text);
+  const text=turn.answer.trim();if(!text)continue;
+  const marks=[...text.matchAll(flowPlacePattern)],pieces=[];
+  let start=0;
+  for(let i=1;i<marks.length;i++){
+   if(marks[i][0]===marks[i-1][0])continue;
+   const previousEnd=marks[i-1].index+marks[i-1][0].length;
+   const between=text.slice(previousEnd,marks[i].index);
+   // Keep "오후에는 손녀와" with the park, rather than the preceding hospital.
+   const sentence=[...between.matchAll(/[.!?。\n]\s*/g)].at(-1);
+   const time=[...between.matchAll(/(?:오늘\s*)?(?:오전|오후|아침|점심|저녁|밤)(?:에는?|에|은|는)?\s*/g)].at(-1);
+   const join=[...between.matchAll(/(?:그리고|그다음에|그다음|갔다가|다녀와서|다녀왔고|갔고|[,，;])\s*/g)].at(-1);
+   const offset=sentence?sentence.index+sentence[0].length:time?time.index:join?join.index+join[0].length:between.length;
+   const boundary=previousEnd+offset;
+   pieces.push(text.slice(start,boundary));start=boundary;
+  }
+  pieces.push(text.slice(start));
+  const touched=new Set();let withinTurnId=null;
   for(let part of pieces){
    part=part.trim().replace(/^(?:그리고|그다음에|그다음|또)\s*/,'').replace(/(?:그리고|그다음에)\s*$/,'').trim();if(!part)continue;
-   const place=flowPlace(part);
-   // Short answers without a new background supplement the preceding event.
-   if(place.type==='unknown'&&events.length){const last=events.at(-1);last.sourceEvidence.quotes.push(part);last.scene=(last.scene+' '+part).slice(0,1800);continue;}
-   const activity=flowActivity(part),names=[...new Set(part.match(/손녀|손자|며느리|사위|남편|아내|친구|딸|아들|의사\s*선생님/g)||[])];
-   const people=[{id:'person-self',alias:'A',name:'나',action:names.length?'':activity,visual:'파란색 상의 (그림 구별용 설정)'},...names.map((name,index)=>({id:flowId('person'),alias:String.fromCharCode(66+index),name,action:'',visual:`${['노란색','초록색','보라색','주황색','분홍색'][index%5]} 상의 (그림 구별용 설정)`}))].slice(0,6);
-   const emotionLabels=flowEmotion(part),cue=/처음|가장 기억|특히 기억|인상 깊/.test(part)?part.slice(0,300):'',objects=[...new Set(part.match(/자전거|벤치|안전모|헬멧|케이크|꽃|책|커피|국수|사과|빵/g)||[])].slice(0,6).map((name,index)=>({id:`object-${index+1}`,name,count:null}));
-   events.push(prepareExperience({schemaVersion:3,id:flowId('event'),title:[place.name,activity||'이야기'].filter(Boolean).join(' · '),scene:part.slice(0,1800),activity,eventDate:session.date||null,dateStatus:session.date?'known':'unknown',timeOfDay:flowTime(part),place,people,objects,memoryCue:cue,memoryCueStatus:cue?'provided':'not_asked',confirmed:false,extractionSource:'rule_based_candidate',collectionStatus:{people:/혼자/.test(part)?'provided':names.length?'provided':'not_asked'},emotion:{text:emotionLabels.length?part.slice(0,1000):'',labels:emotionLabels,status:emotionLabels.length?'provided':'not_asked'},sourceEvidence:{quotes:[part.slice(0,2000)],turnIndices:[turnIndex],answers:[]}}));
+   const place=flowPlace(part),activity=flowActivity(part);
+   if(place.type!=='unknown'&&/(?:취소|안\s*갔|가지\s*않|못\s*갔)/.test(part)&&!activity)continue;
+   let target;
+   if(place.type!=='unknown'){
+    const same=events.filter(event=>event.place.name===place.name&&(!activity||!event.activity||event.activity===activity)&&(flowTime(part)==='unknown'||event.timeOfDay==='unknown'||flowTime(part)===event.timeOfDay));
+    if(same.length===1)target=same[0];
+   }else{
+    target=flowUniqueEvent(part,events)||flowUniqueEvent(turn.question,events)||events.find(event=>event.id===(withinTurnId||focusedId));
+    if(!target&&events.length)continue; // An ambiguous reply stays in the transcript.
+    if(!target&&flowRefusal(part)&&!activity)continue;
+   }
+   if(!target){
+    target=prepareExperience({schemaVersion:3,id:flowId('event'),title:[place.name,activity||'이야기'].filter(Boolean).join(' · '),scene:'',activity:'',eventDate:session.date||null,dateStatus:session.date?'known':'unknown',timeOfDay:'unknown',place:{id:'',name:'',type:'unknown'},people:[],objects:[],memoryCue:'',memoryCueStatus:'not_asked',confirmed:false,extractionSource:'rule_based_candidate',sourceEvidence:{quotes:[],turnIndices:[],answers:[]}});
+    events.push(target);
+   }
+   const index=events.indexOf(target),updated=supplementExperience(target,part,{question:turn.question});
+   updated.scene=[target.scene,part].filter(Boolean).join(' ').slice(0,1800);
+   updated.title=[updated.place.name,updated.activity||'이야기'].filter(Boolean).join(' · ').slice(0,120);
+   updated.sourceEvidence.turnIndices=[...new Set([...(updated.sourceEvidence.turnIndices||[]),turnIndex])];
+   events[index]=updated;touched.add(updated.id);withinTurnId=updated.id;
   }
+  focusedId=touched.size===1?[...touched][0]:null;
  }
  return events.slice(0,8);
 }
@@ -883,20 +1015,28 @@ function applyCollectionAnswer(value,field,answer){
   if(field.startsWith('action:')){const person=r.people.find(p=>p.id===field.slice(7));if(!person)throw new Error('이 장면의 인물이 아니에요.');person.action=flowText(text,200);}
  }
  r.confirmed=false;
- return r;
+ return supplementExperience(r,text);
 }
 
-function createExperienceBundle(events,diaryNarrative){
+function createExperienceBundle(events,diaryNarrative,{turns=[]}={}){
  if(!Array.isArray(events)||!events.length||events.length>8)throw new Error('오늘 이야기의 사건을 1~8개로 준비해 주세요.');
  const prepared=events.map(prepareExperience);if(new Set(prepared.map(e=>e.id)).size!==prepared.length)throw new Error('사건 ID가 중복되어 있어요.');
- return {schemaVersion:1,id:flowId('story'),diaryNarrative:flowText(diaryNarrative,8000),events:prepared,selectedEventId:prepared.length===1?prepared[0].id:null,selectionSource:prepared.length===1?'single_event_pending_confirmation':null,selections:[],importance:{eventId:null,value:null,status:'not_asked'}};
+ const bundle={schemaVersion:1,id:flowId('story'),diaryNarrative:flowText(diaryNarrative,8000),events:prepared,selectedEventId:prepared.length===1?prepared[0].id:null,selectionSource:prepared.length===1?'single_event_pending_confirmation':null,selections:[],importance:{eventId:null,value:null,status:'not_asked'}};
+ return applyExperiencePreference(bundle,turns);
+}
+
+function applyExperiencePreference(bundle,turns){
+ if(bundle.selectedEventId&&bundle.selectionSource!=='single_event_pending_confirmation')return bundle;
+ const preference=preferredExperience(bundle.events,turns);
+ if(preference){bundle.selectedEventId=preference.eventId;bundle.selectionSource='explicit_conversation_preference';bundle.selections=bundle.selections||[];bundle.selections.push({...preference,source:'explicit_conversation_preference'});bundle.importance={eventId:preference.eventId,value:null,status:'not_asked'};}
+ return bundle;
 }
 
 function chooseExperience(bundle,id){
  if(!bundle.events.some(event=>event.id===id))throw new Error('그림으로 남길 이야기를 골라주세요.');
  const changed=bundle.selectedEventId!==id;
  if(changed||bundle.selectionSource==='single_event_pending_confirmation'){bundle.selections=bundle.selections||[];bundle.selections.push({eventId:id,question:'어떤 내용을 그림일기로 만들고 싶으세요?',answer:bundle.events.find(e=>e.id===id).title,answeredAt:new Date().toISOString()});}
- bundle.selectedEventId=id;bundle.selectionSource='user_selection';
+ bundle.selectedEventId=id;if(changed||bundle.selectionSource==='single_event_pending_confirmation')bundle.selectionSource='user_selection';
  if(changed){const event=bundle.events.find(e=>e.id===id);bundle.importance={eventId:id,value:event.importanceRating??null,status:event.importanceStatus||'not_asked'};}
  return bundle.events.find(event=>event.id===id);
 }
@@ -907,7 +1047,7 @@ function experienceMatching(bundle){
 
 function composeExperienceScene(record){
  const time={morning:'아침에',afternoon:'오후에',evening:'저녁에',night:'밤에'}[record.timeOfDay]||'';
- return [time,record.place.name?`${record.place.name}에서 있었던 일.`:'',record.activity?`기억에 남길 일: ${record.activity}.`:'',...record.people.filter(p=>p.action).map(p=>`${p.name}: ${p.action}.`),record.objects.length?`함께 나온 사물: ${record.objects.map(o=>o.name).join(', ')}.`:''].filter(Boolean).join(' ').slice(0,1800)||record.scene;
+ return [time,record.place.name?`${record.place.name}에서 있었던 일.`:'',record.activity?`기억에 남길 일: ${record.activity}.`:'',...record.people.filter(p=>p.action).map(p=>`${p.name}: ${p.action.replace(/[.。]+$/,'')}.`),record.objects.length?`함께 나온 사물: ${record.objects.map(o=>o.name).join(', ')}.`:''].filter(Boolean).join(' ').slice(0,1800)||record.scene;
 }
 
 function selectedDiaryText(record){
@@ -918,7 +1058,48 @@ function selectedDiaryText(record){
  if(!record.people.some(p=>p.action)&&record.activity)lines.push(record.activity.replace(/[.。]+$/,'')+'.');
  if(record.emotion?.status==='provided'&&record.emotion.text)lines.push(record.emotion.text.replace(/[.。]+$/,'')+'.');
  if(record.memoryCueStatus==='provided'&&record.memoryCue)lines.push(record.memoryCue.replace(/[.。]+$/,'')+'.');
- return lines.filter(Boolean).join(' ');
+ const seen=new Set();
+ return lines.filter(Boolean).filter(line=>{
+  let key=line;
+  for(const person of record.people)for(const particle of ['은','는','이','가'])if(key.startsWith(person.name+particle))key=person.name+key.slice(person.name.length+particle.length);
+  key=key.replace(/[\s.!?。]/g,'');if(seen.has(key))return false;seen.add(key);return true;
+ }).join(' ');
+}
+
+function mergeObservedExperience(value,observed){
+ const r=prepareExperience(value),s=r.collectionStatus;
+ const fill=(field,update)=>{if(s[field]==='not_asked'&&observed.collectionStatus[field]!==undefined&&observed.collectionStatus[field]!=='not_asked'){update();s[field]=observed.collectionStatus[field];}};
+ fill('activity',()=>{r.activity=observed.activity;});
+ fill('place',()=>{r.place=structuredClone(observed.place);});
+ fill('time',()=>{r.timeOfDay=observed.timeOfDay;});
+ fill('topic',()=>{r.topic=observed.topic;r.topicSource=observed.topicSource;});
+ fill('emotion',()=>{r.emotion=structuredClone(observed.emotion);});
+ fill('memoryCue',()=>{r.memoryCue=observed.memoryCue;r.memoryCueStatus=observed.memoryCueStatus;});
+ if(!['none','unknown','declined'].includes(s.people))for(const person of observed.people){
+  let existing=r.people.find(p=>p.name===person.name);
+  if(!existing&&r.people.length<6){existing={...person,alias:String.fromCharCode(65+r.people.length)};r.people.push(existing);s[`action:${existing.id}`]=observed.collectionStatus[`action:${person.id}`]||'not_asked';}
+  if(existing&&s[`action:${existing.id}`]==='not_asked'&&observed.collectionStatus[`action:${person.id}`]!=='not_asked'){existing.action=person.action;s[`action:${existing.id}`]=observed.collectionStatus[`action:${person.id}`];}
+ }
+ fill('people',()=>{});
+ if(!['none','unknown','declined'].includes(s.objects)){
+  for(const object of observed.objects)if(!r.objects.some(o=>o.name===object.name)&&r.objects.length<6)r.objects.push({...object,id:`object-${r.objects.length+1}`});
+  fill('objects',()=>{});
+ }
+ r.sourceEvidence.quotes=[...new Set([...r.sourceEvidence.quotes,...observed.sourceEvidence.quotes])].slice(0,80);
+ return prepareExperience(r);
+}
+
+function reconcileExperienceContext(value,observedEvents){
+ const candidate=prepareExperience(value);
+ const ranked=observedEvents.map(event=>{
+  if(candidate.place.name&&event.place.name&&candidate.place.name!==event.place.name)return {event,score:0};
+  if(candidate.timeOfDay!=='unknown'&&event.timeOfDay!=='unknown'&&candidate.timeOfDay!==event.timeOfDay)return {event,score:0};
+  let score=candidate.place.name&&candidate.place.name===event.place.name?5:0;
+  if(candidate.activity&&candidate.activity===event.activity)score+=4;
+  if(candidate.sourceEvidence.quotes.some(a=>event.sourceEvidence.quotes.some(b=>a.includes(b)||b.includes(a))))score+=3;
+  return {event,score};
+ }).sort((a,b)=>b.score-a.score);
+ return ranked[0]?.score>=3&&ranked[0].score!==(ranked[1]?.score||0)?mergeObservedExperience(candidate,ranked[0].event):candidate;
 }
 
 function localDate(date=new Date()){
@@ -933,7 +1114,14 @@ function conversationTranscript(state){
  const bundle=state.experienceBundle;
  const turns=(state.turns||[]).map((turn,index)=>({id:`story-turn-${index+1}`,phase:'today_story',eventIds:bundle?.events.filter(event=>(event.sourceEvidence?.quotes||[]).some(quote=>turn.answer.includes(quote))).map(event=>event.id)||[],question:turn.question,answer:turn.answer,status:turn.answer.trim()?'answered':'skipped',answeredAt:turn.answeredAt||null}));
  if(state.tomorrowText?.trim())turns.push({id:'future-plans',phase:'future_plans',eventIds:[],question:'앞으로 하실 일이 있으세요?',answer:state.tomorrowText,status:'answered',answeredAt:null});
- for(const [index,selection] of (bundle?.selections||[]).entries())turns.push({id:`event-selection-${index+1}`,phase:'event_selection',eventIds:[selection.eventId],question:selection.question,answer:selection.answer,status:'answered',answeredAt:selection.answeredAt||null});
+ for(const [index,selection] of (bundle?.selections||[]).entries()){
+  if(selection.source==='explicit_conversation_preference'){
+   const original=turns.find(turn=>turn.question===selection.question&&turn.answer.includes(selection.answer));
+   if(original)original.diarySelection={eventId:selection.eventId,source:selection.source};
+   continue; // This was already spoken, not an additional selection question.
+  }
+  turns.push({id:`event-selection-${index+1}`,phase:'event_selection',eventIds:[selection.eventId],question:selection.question,answer:selection.answer,status:'answered',answeredAt:selection.answeredAt||null});
+ }
  for(const event of bundle?.events||[])for(const [index,answer] of (event.sourceEvidence?.answers||[]).entries())turns.push({id:`${event.id}-detail-${index+1}`,phase:'selected_event_details',eventIds:[event.id],field:answer.field,question:answer.question||'선택한 사건의 추가 정보 확인',answer:answer.quote,status:answer.status,answeredAt:answer.answeredAt||null});
  if(bundle?.importance?.status&&bundle.importance.status!=='not_asked')turns.push({id:'experience-importance',phase:'importance',eventIds:[bundle.importance.eventId],question:'이 경험은 얼마나 소중한가요?',answer:bundle.importance.status==='provided'?`${bundle.importance.value}점`:'별점은 나중에 매길게요.',status:bundle.importance.status,answeredAt:bundle.importance.answeredAt||null});
  return {schemaVersion:1,turns,futurePlans:state.tomorrowText?.trim()?{phase:'future_plans',question:'앞으로 하실 일이 있으세요?',answer:state.tomorrowText}:null,importance:bundle?.importance||null,note:'질문은 발언 근거가 아니다. 실제 경험·추가 확인·미래 계획·중요도 응답을 구분해 보관한다.'};
@@ -1065,7 +1253,7 @@ function renderDiaryDetail(container,entry){
   const phases={today_story:'오늘 이야기',selected_event_details:'선택한 이야기의 추가 확인',event_selection:'그림으로 남길 이야기 선택',future_plans:'앞으로의 일정 · 오늘 경험과 별도',importance:'선택한 경험의 중요도'};
   for(const [index,turn] of model.conversation.entries()){
    const item=diaryNode('li','diary-turn');if(turn.phase==='future_plans')item.classList.add('diary-future-turn');
-   item.append(diaryNode('p','diary-turn-label',`${String(index+1).padStart(2,'0')} · ${phases[turn.phase]||'대화 기록'}`));
+   item.append(diaryNode('p','diary-turn-label',`${String(index+1).padStart(2,'0')} · ${phases[turn.phase]||'대화 기록'}${turn.diarySelection?' · 이 경험을 남기기로 함':''}`));
    item.append(diaryNode('p','diary-turn-question',diaryText(turn.question)||'질문 내용이 저장되지 않았어요.'));
    const answer=diaryNode('div','diary-turn-answer');answer.append(diaryNode('span','diary-speaker','나의 이야기'),diaryNode('p','',diaryText(turn.answer)||'이 질문은 건너뛰었어요.'));
    item.append(answer);turns.append(item);
@@ -1199,7 +1387,7 @@ async function makeDraft(turns){
  const response=await api('draft',sessionInput(turns));state.turns=turns;state.answer='';state.draft={title:response.title,body:response.body,scene:response.scene};state.dayNarrative=response.body;state.image='';state.imageScene='';state.imageEventId=null;state.sceneRecord=null;state.sceneCandidate=null;state.scenePreparationOpen=false;
  let candidates;
  try{const prepared=await api('scene-draft',{draft:state.draft,session:sessionInput(turns)});candidates=prepared.candidates||(prepared.candidate?[prepared.candidate]:[]);}catch{candidates=localExperienceEvents(sessionInput(turns));}
- if(candidates?.length){state.experienceBundle=createExperienceBundle(candidates,state.draft.body);state.experienceBundle.sourceUtterances=experienceTurns(turns).map(t=>t.answer);if(state.experienceBundle.selectedEventId)state.draft.scene=state.experienceBundle.events[0].scene;}
+ if(candidates?.length){state.experienceBundle=createExperienceBundle(candidates,state.draft.body,{turns:experienceTurns(turns)});state.experienceBundle.sourceUtterances=experienceTurns(turns).map(t=>t.answer);if(state.experienceBundle.selectedEventId)state.draft.scene=state.experienceBundle.events.find(event=>event.id===state.experienceBundle.selectedEventId).scene;}
  else state.experienceBundle=null;
  $('draftNote').textContent=response.mode==='ai'?'내 이야기와 맞는지 편하게 읽어보세요.':'말씀해주신 이야기를 모았어요. 원하는 표현으로 고칠 수 있어요.';paintReview();view('review');await persist();
 }
@@ -1231,10 +1419,12 @@ $('applyEdits').onclick=()=>{if(!state.draft.title.trim()||!state.draft.body.tri
 function selectedExperience(){return state?.experienceBundle?.events.find(event=>event.id===state.experienceBundle.selectedEventId);}
 function renderExperienceChoices(){
  const bundle=state.experienceBundle;$('eventSelection').hidden=!bundle;if(!bundle)return;
+ if(!state.image)applyExperiencePreference(bundle,experienceTurns(state.turns));
  $('eventChoices').replaceChildren();$('fullDayStory').textContent=state.dayNarrative||bundle.diaryNarrative;
  for(const event of bundle.events){const button=document.createElement('button');button.type='button';button.className='event-choice';button.dataset.eventId=event.id;button.setAttribute('aria-pressed',String(bundle.selectedEventId===event.id));const heading=document.createElement('strong');heading.textContent=event.title;const summary=document.createElement('span');summary.textContent=event.scene.slice(0,180);button.append(heading,summary);button.onclick=()=>{if(bundle.selectedEventId===event.id)return;const selected=chooseExperience(bundle,event.id);state.sceneCandidate=selected;state.sceneRecord=null;state.image='';state.imageScene='';state.imageEventId=null;state.imageGeneration=null;state.scenePreparationOpen=false;state.sceneAnswer='';state.draft.title=selected.title;state.draft.body=selected.scene;state.draft.scene=selected.scene;paintReview();scheduleSave();};$('eventChoices').append(button);}
- $('eventSelectionTitle').textContent=bundle.events.length>1?'어떤 내용을 그림일기로 만들고 싶으세요?':'이 이야기를 그림으로 남겨요';
- $('eventSelectionNote').textContent=bundle.selectedEventId?'선택한 이야기의 부족한 내용만 함께 확인할게요.':'한 가지를 고르면 그 이야기로만 그림을 만들어요.';
+ const alreadyChosen=bundle.selectionSource==='explicit_conversation_preference';
+ $('eventSelectionTitle').textContent=alreadyChosen?'남기고 싶다고 말씀하신 이야기예요':bundle.events.length>1?'어떤 내용을 그림일기로 만들고 싶으세요?':'이 이야기를 그림으로 남겨요';
+ $('eventSelectionNote').textContent=alreadyChosen?'말씀해주신 내용으로 골랐어요. 아래에서 다른 이야기로 바꿀 수도 있어요.':bundle.selectedEventId?'선택한 이야기의 부족한 내용만 함께 확인할게요.':'한 가지를 고르면 그 이야기로만 그림을 만들어요.';
  if(!bundle.selectedEventId)$('previewScene').textContent='아래에서 그림으로 남길 이야기를 하나 골라주세요.';
 }
 function renderDialogue(container,conversation){container.replaceChildren();for(const turn of conversation?.turns||[]){const item=document.createElement('article');item.className='dialogue-turn';const label=document.createElement('small');label.textContent={today_story:'오늘 이야기',selected_event_details:'선택한 사건의 추가 확인',event_selection:'그림으로 남길 사건 선택',future_plans:'앞으로의 일정 · 오늘 경험과 분리',importance:'선택한 경험의 중요도'}[turn.phase]||'대화 기록';const question=document.createElement('p');question.className='dialogue-question';question.textContent=`기억잇다: ${turn.question}`;const answer=document.createElement('p');answer.textContent=`나: ${turn.answer||'(이 질문은 건너뛰었어요)'}`;item.append(label,question,answer);container.append(item);}}
@@ -1243,7 +1433,7 @@ function putSelectedCandidate(candidate){
  bundle.events=bundle.events.map(event=>event.id===candidate.id?candidate:event);state.sceneCandidate=candidate;state.sceneRecord=null;
 }
 function paintScenePreparation(){
- const candidate=prepareExperience(state.sceneCandidate||selectedExperience());putSelectedCandidate(candidate);renderDialogue($('reviewDialogue'),conversationTranscript(state));
+ const candidate=reconcileExperienceContext(state.sceneCandidate||selectedExperience(),localExperienceEvents(sessionInput()));putSelectedCandidate(candidate);renderDialogue($('reviewDialogue'),conversationTranscript(state));
  $('scenePreparation').hidden=false;state.scenePreparationOpen=true;
  $('selectedSceneLabel').textContent=`선택한 이야기: ${candidate.title}`;
  const next=collectionQuestion(candidate);$('sceneCollectionPanel').hidden=!next;$('sceneConfirmationPanel').hidden=!!next;$('confirmSceneDraw').hidden=!!next;
@@ -1261,7 +1451,7 @@ async function draw(){
  if(currentImage(state)){paintResult();view('result');return;}
  if(state.experienceBundle&&!state.experienceBundle.selectedEventId){notify('그림으로 남길 이야기를 하나 골라주세요.');$('eventSelectionTitle').focus();return;}
  await task(async()=>{
-  if(!state.experienceBundle){const response=await api('scene-draft',{draft:state.draft,session:sessionInput(state.turns)});const candidates=response.candidates||(response.candidate?[response.candidate]:[]);state.experienceBundle=createExperienceBundle(candidates,state.draft.body);renderExperienceChoices();if(!state.experienceBundle.selectedEventId)return;}
+  if(!state.experienceBundle){const response=await api('scene-draft',{draft:state.draft,session:sessionInput(state.turns)});const candidates=response.candidates||(response.candidate?[response.candidate]:[]);state.experienceBundle=createExperienceBundle(candidates,state.draft.body,{turns:experienceTurns(state.turns)});renderExperienceChoices();if(!state.experienceBundle.selectedEventId)return;}
   state.sceneCandidate=selectedExperience();paintScenePreparation();$('scenePreparationTitle').focus();await persist();
  },'그림으로 남길 이야기를 함께 확인해요…');
 }

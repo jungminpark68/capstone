@@ -6,11 +6,11 @@ import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {validateSession,localReply,contextOf,localDraft,validateDraft} from './diary.js';
 import {questionPrompt,draftPrompt,imagePrompt,planPrompt} from './prompts.js';
-import {conversationGuard} from './public/conversation.js';
+import {conversationGuard,filterFollowup} from './public/conversation.js';
 import {prepareExperience,collectionQuestion,applyCollectionAnswer,selectedDiaryText} from './public/experience-flow.js';
 import {verificationModel,validateVerificationInput,verificationPayload,verificationResponse} from './verification.js';
 import {validateSceneRecord,sceneGenerationPrompt,sceneFacts} from './public/diary-record.js';
-import {compileScenePlan,sceneCandidate,sceneCandidates,enrichCollectionAnswer,extractionPrompt,singleSceneExtractionPrompt,IMAGE_STYLES} from './scene-pipeline.js';
+import {compileScenePlan,sceneCandidate,sceneCandidates,enrichCollectionAnswer,mergeObservedExperience,extractionPrompt,singleSceneExtractionPrompt,IMAGE_STYLES} from './scene-pipeline.js';
 const files={'/':['public/index.html','text/html'],'/app.js':['public/app.js','text/javascript'],'/conversation.js':['public/conversation.js','text/javascript'],'/storage.js':['public/storage.js','text/javascript'],'/state.js':['public/state.js','text/javascript'],'/calendar.js':['public/calendar.js','text/javascript'],'/style.css':['public/style.css','text/css'],'/demo.html':['demo.html','text/html'],
  '/verification':['public/verification-lab.html','text/html'],'/verification/':['public/verification-lab.html','text/html'],'/verification-lab':['public/verification-lab.html','text/html'],'/verification.html':['public/verification.html','text/html'],
  '/verification-lab.css':['public/verification-lab.css','text/css'],'/verification-lab.js':['public/verification-lab.js','text/javascript'],'/diary-record.js':['public/diary-record.js','text/javascript'],'/generation-plan.js':['public/generation-plan.js','text/javascript'],'/scene-form.js':['public/scene-form.js','text/javascript'],'/lab-samples.js':['public/lab-samples.js','text/javascript'],
@@ -42,7 +42,7 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
      if(ai&&status==='provided')try{
       const extracted=await chat(singleSceneExtractionPrompt+' 추가로 topic:{value,evidence}, emotion:{value,labels,evidence}도 추출한다. selectedContext는 기존 선택 사건의 문맥이다. 새 답변에서 직접 확인되는 값만 반환한다.',{turns:[{question:collectionQuestion(data.candidate).question,answer:data.answer}],selectedContext:{id:data.candidate.id,scene:data.candidate.scene,activity:data.candidate.activity,timeOfDay:data.candidate.timeOfDay,place:data.candidate.place,people:data.candidate.people,objects:data.candidate.objects,topic:data.candidate.topic,emotion:data.candidate.emotion,memoryCue:data.candidate.memoryCue}});
       const enriched=enrichCollectionAnswer(data.candidate,data.answer,extracted);
-      if(enriched.collectionStatus[data.field]==='provided'){enriched.sourceEvidence.answers.push({field:data.field,question:collectionQuestion(data.candidate).question,quote:data.answer.trim(),status:'provided',answeredAt:new Date().toISOString()});candidate=enriched;}
+      if(enriched.collectionStatus[data.field]==='provided'){const answers=candidate.sourceEvidence.answers;candidate=mergeObservedExperience(enriched,candidate);candidate.sourceEvidence.answers=answers;}
       else candidate=enrichCollectionAnswer(candidate,data.answer,extracted);
      }catch{notice='말씀하신 원문을 보관했어요. 마지막 확인에서 표현을 고칠 수 있어요.';}
      return send(200,{candidate,nextQuestion:collectionQuestion(candidate),notice});
@@ -91,10 +91,12 @@ export function createApp({env=process.env,fetcher=fetch}={}) {
     if(req.url==='/api/question'){
      const guarded=conversationGuard(session);if(guarded)return send(200,{...guarded,mode:'local'});
      if(!session.turns.length)return send(200,{...localReply(session),mode:'local'});
-     if(!ai)return send(200,{...localReply({...session,turns:experienceTurns(session.turns)}),mode:'local'});
+     const actualSession={...session,turns:experienceTurns(session.turns)},local=localReply(actualSession);
+     if(!ai||local.selectionReady)return send(200,{...local,mode:'local'});
      const result=await chat(questionPrompt,session);
      if(typeof result.question!=='string'||!result.question.trim()||result.question.length>500||typeof result.ready!=='boolean')throw new Error('AI 질문 형식이 올바르지 않아요. 다시 시도해 주세요.');
-     return send(200,{question:result.question,ready:result.ready&&session.turns.some(t=>t.answer.trim()),rest:result.rest===true,mode:'ai'});
+     const filtered=filterFollowup(actualSession,result);
+     return send(200,{question:filtered.question,ready:filtered.ready&&session.turns.some(t=>t.answer.trim()),rest:filtered.rest===true,mode:filtered.filteredQuestionReason?'local':'ai',...(filtered.filteredQuestionReason?{filteredQuestionReason:filtered.filteredQuestionReason}:{})});
     }
     if(req.url==='/api/draft'){
      session.turns=experienceTurns(session.turns);

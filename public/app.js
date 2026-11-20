@@ -3,7 +3,7 @@ import {localReply} from './conversation.js';
 import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvents,putEvent,putEvents,removeEvent,updateEvent,resetAppData} from './storage.js';
 import {localDate,readableDate,newSession,currentImage,makeEntry,restorable,conversationTranscript} from './state.js';
 import {mountSceneForm} from './scene-form.js';
-import {localExperienceEvents,createExperienceBundle,chooseExperience,prepareExperience,collectionQuestion,applyCollectionAnswer,composeExperienceScene,selectedDiaryText} from './experience-flow.js';
+import {localExperienceEvents,createExperienceBundle,chooseExperience,prepareExperience,collectionQuestion,applyCollectionAnswer,composeExperienceScene,selectedDiaryText,applyExperiencePreference,reconcileExperienceContext} from './experience-flow.js';
 import {renderDiaryDetail,diaryImageSource} from './diary-view.js';
 const STANDALONE=false;
 if(STANDALONE)document.querySelectorAll('a[href="/verification"]').forEach(link=>link.href='verification-demo.html');
@@ -111,7 +111,7 @@ async function makeDraft(turns){
  const response=await api('draft',sessionInput(turns));state.turns=turns;state.answer='';state.draft={title:response.title,body:response.body,scene:response.scene};state.dayNarrative=response.body;state.image='';state.imageScene='';state.imageEventId=null;state.sceneRecord=null;state.sceneCandidate=null;state.scenePreparationOpen=false;
  let candidates;
  try{const prepared=await api('scene-draft',{draft:state.draft,session:sessionInput(turns)});candidates=prepared.candidates||(prepared.candidate?[prepared.candidate]:[]);}catch{candidates=localExperienceEvents(sessionInput(turns));}
- if(candidates?.length){state.experienceBundle=createExperienceBundle(candidates,state.draft.body);state.experienceBundle.sourceUtterances=experienceTurns(turns).map(t=>t.answer);if(state.experienceBundle.selectedEventId)state.draft.scene=state.experienceBundle.events[0].scene;}
+ if(candidates?.length){state.experienceBundle=createExperienceBundle(candidates,state.draft.body,{turns:experienceTurns(turns)});state.experienceBundle.sourceUtterances=experienceTurns(turns).map(t=>t.answer);if(state.experienceBundle.selectedEventId)state.draft.scene=state.experienceBundle.events.find(event=>event.id===state.experienceBundle.selectedEventId).scene;}
  else state.experienceBundle=null;
  $('draftNote').textContent=response.mode==='ai'?'내 이야기와 맞는지 편하게 읽어보세요.':'말씀해주신 이야기를 모았어요. 원하는 표현으로 고칠 수 있어요.';paintReview();view('review');await persist();
 }
@@ -143,10 +143,12 @@ $('applyEdits').onclick=()=>{if(!state.draft.title.trim()||!state.draft.body.tri
 function selectedExperience(){return state?.experienceBundle?.events.find(event=>event.id===state.experienceBundle.selectedEventId);}
 function renderExperienceChoices(){
  const bundle=state.experienceBundle;$('eventSelection').hidden=!bundle;if(!bundle)return;
+ if(!state.image)applyExperiencePreference(bundle,experienceTurns(state.turns));
  $('eventChoices').replaceChildren();$('fullDayStory').textContent=state.dayNarrative||bundle.diaryNarrative;
  for(const event of bundle.events){const button=document.createElement('button');button.type='button';button.className='event-choice';button.dataset.eventId=event.id;button.setAttribute('aria-pressed',String(bundle.selectedEventId===event.id));const heading=document.createElement('strong');heading.textContent=event.title;const summary=document.createElement('span');summary.textContent=event.scene.slice(0,180);button.append(heading,summary);button.onclick=()=>{if(bundle.selectedEventId===event.id)return;const selected=chooseExperience(bundle,event.id);state.sceneCandidate=selected;state.sceneRecord=null;state.image='';state.imageScene='';state.imageEventId=null;state.imageGeneration=null;state.scenePreparationOpen=false;state.sceneAnswer='';state.draft.title=selected.title;state.draft.body=selected.scene;state.draft.scene=selected.scene;paintReview();scheduleSave();};$('eventChoices').append(button);}
- $('eventSelectionTitle').textContent=bundle.events.length>1?'어떤 내용을 그림일기로 만들고 싶으세요?':'이 이야기를 그림으로 남겨요';
- $('eventSelectionNote').textContent=bundle.selectedEventId?'선택한 이야기의 부족한 내용만 함께 확인할게요.':'한 가지를 고르면 그 이야기로만 그림을 만들어요.';
+ const alreadyChosen=bundle.selectionSource==='explicit_conversation_preference';
+ $('eventSelectionTitle').textContent=alreadyChosen?'남기고 싶다고 말씀하신 이야기예요':bundle.events.length>1?'어떤 내용을 그림일기로 만들고 싶으세요?':'이 이야기를 그림으로 남겨요';
+ $('eventSelectionNote').textContent=alreadyChosen?'말씀해주신 내용으로 골랐어요. 아래에서 다른 이야기로 바꿀 수도 있어요.':bundle.selectedEventId?'선택한 이야기의 부족한 내용만 함께 확인할게요.':'한 가지를 고르면 그 이야기로만 그림을 만들어요.';
  if(!bundle.selectedEventId)$('previewScene').textContent='아래에서 그림으로 남길 이야기를 하나 골라주세요.';
 }
 function renderDialogue(container,conversation){container.replaceChildren();for(const turn of conversation?.turns||[]){const item=document.createElement('article');item.className='dialogue-turn';const label=document.createElement('small');label.textContent={today_story:'오늘 이야기',selected_event_details:'선택한 사건의 추가 확인',event_selection:'그림으로 남길 사건 선택',future_plans:'앞으로의 일정 · 오늘 경험과 분리',importance:'선택한 경험의 중요도'}[turn.phase]||'대화 기록';const question=document.createElement('p');question.className='dialogue-question';question.textContent=`기억잇다: ${turn.question}`;const answer=document.createElement('p');answer.textContent=`나: ${turn.answer||'(이 질문은 건너뛰었어요)'}`;item.append(label,question,answer);container.append(item);}}
@@ -155,7 +157,7 @@ function putSelectedCandidate(candidate){
  bundle.events=bundle.events.map(event=>event.id===candidate.id?candidate:event);state.sceneCandidate=candidate;state.sceneRecord=null;
 }
 function paintScenePreparation(){
- const candidate=prepareExperience(state.sceneCandidate||selectedExperience());putSelectedCandidate(candidate);renderDialogue($('reviewDialogue'),conversationTranscript(state));
+ const candidate=reconcileExperienceContext(state.sceneCandidate||selectedExperience(),localExperienceEvents(sessionInput()));putSelectedCandidate(candidate);renderDialogue($('reviewDialogue'),conversationTranscript(state));
  $('scenePreparation').hidden=false;state.scenePreparationOpen=true;
  $('selectedSceneLabel').textContent=`선택한 이야기: ${candidate.title}`;
  const next=collectionQuestion(candidate);$('sceneCollectionPanel').hidden=!next;$('sceneConfirmationPanel').hidden=!!next;$('confirmSceneDraw').hidden=!!next;
@@ -173,7 +175,7 @@ async function draw(){
  if(currentImage(state)){paintResult();view('result');return;}
  if(state.experienceBundle&&!state.experienceBundle.selectedEventId){notify('그림으로 남길 이야기를 하나 골라주세요.');$('eventSelectionTitle').focus();return;}
  await task(async()=>{
-  if(!state.experienceBundle){const response=await api('scene-draft',{draft:state.draft,session:sessionInput(state.turns)});const candidates=response.candidates||(response.candidate?[response.candidate]:[]);state.experienceBundle=createExperienceBundle(candidates,state.draft.body);renderExperienceChoices();if(!state.experienceBundle.selectedEventId)return;}
+  if(!state.experienceBundle){const response=await api('scene-draft',{draft:state.draft,session:sessionInput(state.turns)});const candidates=response.candidates||(response.candidate?[response.candidate]:[]);state.experienceBundle=createExperienceBundle(candidates,state.draft.body,{turns:experienceTurns(state.turns)});renderExperienceChoices();if(!state.experienceBundle.selectedEventId)return;}
   state.sceneCandidate=selectedExperience();paintScenePreparation();$('scenePreparationTitle').focus();await persist();
  },'그림으로 남길 이야기를 함께 확인해요…');
 }

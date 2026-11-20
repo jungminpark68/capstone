@@ -109,7 +109,7 @@ export function renderDiaryDetail(container,entry){
   const phases={today_story:'오늘 이야기',selected_event_details:'선택한 이야기의 추가 확인',event_selection:'그림으로 남길 이야기 선택',future_plans:'앞으로의 일정 · 오늘 경험과 별도',importance:'선택한 경험의 중요도'};
   for(const [index,turn] of model.conversation.entries()){
    const item=diaryNode('li','diary-turn');if(turn.phase==='future_plans')item.classList.add('diary-future-turn');
-   item.append(diaryNode('p','diary-turn-label',`${String(index+1).padStart(2,'0')} · ${phases[turn.phase]||'대화 기록'}`));
+   item.append(diaryNode('p','diary-turn-label',`${String(index+1).padStart(2,'0')} · ${phases[turn.phase]||'대화 기록'}${turn.diarySelection?' · 이 경험을 남기기로 함':''}`));
    item.append(diaryNode('p','diary-turn-question',diaryText(turn.question)||'질문 내용이 저장되지 않았어요.'));
    const answer=diaryNode('div','diary-turn-answer');answer.append(diaryNode('span','diary-speaker','나의 이야기'),diaryNode('p','',diaryText(turn.answer)||'이 질문은 건너뛰었어요.'));
    item.append(answer);turns.append(item);

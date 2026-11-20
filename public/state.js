@@ -13,7 +13,14 @@ export function conversationTranscript(state){
  const bundle=state.experienceBundle;
  const turns=(state.turns||[]).map((turn,index)=>({id:`story-turn-${index+1}`,phase:'today_story',eventIds:bundle?.events.filter(event=>(event.sourceEvidence?.quotes||[]).some(quote=>turn.answer.includes(quote))).map(event=>event.id)||[],question:turn.question,answer:turn.answer,status:turn.answer.trim()?'answered':'skipped',answeredAt:turn.answeredAt||null}));
  if(state.tomorrowText?.trim())turns.push({id:'future-plans',phase:'future_plans',eventIds:[],question:'앞으로 하실 일이 있으세요?',answer:state.tomorrowText,status:'answered',answeredAt:null});
- for(const [index,selection] of (bundle?.selections||[]).entries())turns.push({id:`event-selection-${index+1}`,phase:'event_selection',eventIds:[selection.eventId],question:selection.question,answer:selection.answer,status:'answered',answeredAt:selection.answeredAt||null});
+ for(const [index,selection] of (bundle?.selections||[]).entries()){
+  if(selection.source==='explicit_conversation_preference'){
+   const original=turns.find(turn=>turn.question===selection.question&&turn.answer.includes(selection.answer));
+   if(original)original.diarySelection={eventId:selection.eventId,source:selection.source};
+   continue; // This was already spoken, not an additional selection question.
+  }
+  turns.push({id:`event-selection-${index+1}`,phase:'event_selection',eventIds:[selection.eventId],question:selection.question,answer:selection.answer,status:'answered',answeredAt:selection.answeredAt||null});
+ }
  for(const event of bundle?.events||[])for(const [index,answer] of (event.sourceEvidence?.answers||[]).entries())turns.push({id:`${event.id}-detail-${index+1}`,phase:'selected_event_details',eventIds:[event.id],field:answer.field,question:answer.question||'선택한 사건의 추가 정보 확인',answer:answer.quote,status:answer.status,answeredAt:answer.answeredAt||null});
  if(bundle?.importance?.status&&bundle.importance.status!=='not_asked')turns.push({id:'experience-importance',phase:'importance',eventIds:[bundle.importance.eventId],question:'이 경험은 얼마나 소중한가요?',answer:bundle.importance.status==='provided'?`${bundle.importance.value}점`:'별점은 나중에 매길게요.',status:bundle.importance.status,answeredAt:bundle.importance.answeredAt||null});
  return {schemaVersion:1,turns,futurePlans:state.tomorrowText?.trim()?{phase:'future_plans',question:'앞으로 하실 일이 있으세요?',answer:state.tomorrowText}:null,importance:bundle?.importance||null,note:'질문은 발언 근거가 아니다. 실제 경험·추가 확인·미래 계획·중요도 응답을 구분해 보관한다.'};
