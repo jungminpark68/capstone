@@ -1,4 +1,6 @@
 import {experienceTurns} from './calendar.js';
+export const MEMORABLE_OPENING='오늘 하루 중 특히 기억에 남거나, 그림일기로 남기고 싶은 일이 있었나요?';
+export const DAILY_FALLBACK='괜찮아요. 그럼 오늘은 어떻게 보내셨어요? 식사나 잠깐의 산책처럼 작은 이야기도 좋아요.';
 const CHANGE_TOPIC='괜찮아요. 그 이야기는 여기까지 해도 돼요. 오늘 다른 일 중 편하게 들려주고 싶은 것이 있나요?';
 function reluctant(answer){return /딱히.*없|별(?:다른|로)?.*없|이야기.*없|할\s*말.*없|말할.*없|말하고\s*싶지|얘기.*싫|이야기.*싫|다른\s*(?:얘기|이야기)|불편|부담|무거(?:웠|워)/.test(answer);}
 function stopRequested(answer){return /쉬고\s*싶|그만|여기까지|피곤|지쳤|기억(?:이)?\s*안|모르겠|생각이\s*안/.test(answer);}
@@ -7,6 +9,9 @@ export function conversationGuard({turns}){
  const last=turns.at(-1),answer=last.answer.trim();
  const hasStory=experienceTurns(turns).some(t=>t.answer.trim()&&!reluctant(t.answer)&&!stopRequested(t.answer)&&!/^(?:없어요|아니요|글쎄)/.test(t.answer));
  const end=()=>hasStory?{question:'괜찮아요. 들려주신 이야기만으로 오늘 기록을 정리할게요.',ready:true}:{question:'더 말씀하지 않으셔도 괜찮아요. 잠시 쉬었다가 이어가요.',ready:false,rest:true};
+ const ordinaryStory=contextOf([last]).activity;
+ if(turns.length===1&&last.question.includes('그림일기로 남기고 싶은')&&!ordinaryStory&&(!answer||/없|딱히|별다른|모르겠|기억.*안|생각.*안/.test(answer)))return {question:DAILY_FALLBACK,ready:false,broadenedTopic:true};
+ if(last.question===DAILY_FALLBACK&&!ordinaryStory&&(!answer||/없|아니|모르겠|기억.*안/.test(answer)))return {question:'괜찮아요. 잠시 쉬었다가 작은 이야기 하나가 떠오르면 다시 들려주세요.',ready:false,rest:true};
  if(stopRequested(answer))return end();
  if(last.question===CHANGE_TOPIC&&(!answer||/^(?:딱히(?:는)?\s*)?(?:없|아니|글쎄|그냥\s*그랬)|^별(?:다른|로)?.*없/.test(answer)&&answer.length<35))return end();
  if(!answer||reluctant(answer)){
@@ -28,7 +33,7 @@ export function localReply({turns,photos=[],todayEvents=[]}) {
   const guarded=conversationGuard({turns});if(guarded)return guarded;
   const c=contextOf(turns);
   const pending=todayEvents.filter(e=>e.completed!==true);
-  if(!turns.length)return {question:pending.length?`달력에 ${pending[0].time?pending[0].time+' ':''}‘${pending[0].title}’ 일정이 있어요. 실제로는 어떻게 보내셨나요? 일정이 바뀌었어도 괜찮아요.`:photos.length?'사진에 담긴 오늘의 이야기를 들려주시겠어요?':'오늘 기억에 남는 일이 있나요? 식사나 집에서 보낸 시간도 좋아요.',ready:false};
+  if(!turns.length)return {question:MEMORABLE_OPENING+(photos.length?' 고르신 사진을 보며 떠올려도 좋아요.':''),ready:false};
   if(c.stop)return c.hasStory&&turns.some(t=>t.answer.trim()&&!/쉬고 싶|그만|여기까지|피곤|지쳤|기억.*안|모르겠/.test(t.answer))?{question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true}:{question:'괜찮아요. 잠시 쉬었다가 이어가도 좋아요.',ready:false,rest:true};
   if(c.hasStory&&((c.activity&&c.feeling&&(c.detail||c.text.length>=30))||turns.length>=6))return {question:'들려주신 이야기로 오늘의 일기를 정리해 볼게요.',ready:true};
   const choices=[];

@@ -3,3 +3,13 @@
 !.env.example
 node_modules/
 *.log
+
+# Local ML datasets and weights; keep code and notebooks in Git.
+__pycache__/
+*.pyc
+/runs/
+/data/diary-*/
+/ml/runs/
+/ml/data/
+/features/
+/ml/features/

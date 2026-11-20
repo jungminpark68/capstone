@@ -1,14 +1,18 @@
 import {calendarEvent,nextDate,localPlans,experienceTurns,validDate,monthDays,shiftMonth,planCandidate,futurePlanText} from './calendar.js';
 import {localReply} from './conversation.js';
 import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvents,putEvent,putEvents,removeEvent,updateEvent,resetAppData} from './storage.js';
-import {localDate,readableDate,newSession,currentImage,makeEntry,restorable} from './state.js';
+import {localDate,readableDate,newSession,currentImage,makeEntry,restorable,conversationTranscript} from './state.js';
+import {mountSceneForm} from './scene-form.js';
+import {localExperienceEvents,createExperienceBundle,chooseExperience,prepareExperience,collectionQuestion,applyCollectionAnswer,composeExperienceScene,selectedDiaryText} from './experience-flow.js';
 const STANDALONE=false;
+if(STANDALONE)document.querySelectorAll('a[href="/verification"]').forEach(link=>link.href='verification-demo.html');
 const $=id=>document.getElementById(id);
 const screens=['home','photos','conversation','rest','tomorrow','review','result','done','history','detail','calendar'];
 const writing=new Set(['photos','conversation','rest','tomorrow','review','result']);
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
 let calendarReturn='home',editingEventId=null,editingExisting=false;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
+let sceneForm=null;
 resetHomeDate();
 function notify(message,error=false,detail=''){
  $('feedback').hidden=!message;$('feedback').classList.toggle('error',error);$('status').textContent=message;
@@ -45,16 +49,16 @@ function ask(title,body,label='확인'){
 }
 async function task(fn,message,{drawing=false}={}){
  if(busy)return;busy=true;stopVoice();retryAction=null;$('retry').hidden=true;notify(message);$('busySpinner').hidden=false;$('busyHint').hidden=!drawing;$('workspace').setAttribute('aria-busy','true');
- document.querySelectorAll('button,input,textarea').forEach(e=>{if(e.id!=='fontButton')e.disabled=true;});
+ document.querySelectorAll('button,input,textarea,select').forEach(e=>{if(e.id!=='fontButton')e.disabled=true;});
  try{await fn();notify('');}catch(e){retryAction=()=>task(fn,message,{drawing});const detail=e.message||'알 수 없는 연결 오류';let friendly=detail;
   if(/HTTP|API |모델 |AI |fetch|network/i.test(detail))friendly=drawing?'지금은 그림을 만들기 어려워요. 이야기는 그대로 있으니 글로 먼저 저장해도 괜찮아요.':'이야기를 연결하는 데 잠시 어려움이 있어요. 입력한 내용은 그대로 두었어요.';
   notify(friendly,true,friendly!==detail?detail:'');$('feedback').scrollIntoView({block:'nearest',behavior:'instant'});await persist();
- }finally{busy=false;$('busySpinner').hidden=true;$('busyHint').hidden=true;$('workspace').removeAttribute('aria-busy');document.querySelectorAll('button,input,textarea').forEach(e=>e.disabled=false);syncSpeechUI();}
+ }finally{busy=false;$('busySpinner').hidden=true;$('busyHint').hidden=true;$('workspace').removeAttribute('aria-busy');document.querySelectorAll('button,input,textarea,select').forEach(e=>e.disabled=false);syncSpeechUI();}
 }
 $('retry').onclick=()=>retryAction?.();
 async function api(path,data){
- if(STANDALONE){if(path==='question')return localReply({...data,turns:experienceTurns(data.turns)});if(path==='plans')return {events:localPlans(data),mode:'local'};if(path==='draft'){const answers=experienceTurns(data.turns).map(t=>t.answer.trim()).filter(Boolean);if(!answers.length)throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요.');return {title:'오늘의 소중한 기억',body:answers.join('\n'),scene:answers.join(' ').slice(0,3000),mode:'local'};}throw new Error('단독 체험 화면에서는 AI 그림을 만들 수 없어요. 서버 실행과 API 키 연결이 필요해요.');}
- const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(path==='illustration'?135000:55000)});
+ if(STANDALONE){if(path==='scene-text')return {body:selectedDiaryText(data),mode:'local'};if(path==='scene-draft'){const candidates=localExperienceEvents(data.session);return {candidates,candidate:candidates[0]};}if(path==='scene-answer'){const candidate=applyCollectionAnswer(data.candidate,data.field,data.answer);return {candidate,nextQuestion:collectionQuestion(candidate)};}if(path==='question')return localReply({...data,turns:experienceTurns(data.turns)});if(path==='plans')return {events:localPlans(data),mode:'local'};if(path==='draft'){const answers=experienceTurns(data.turns).map(t=>t.answer.trim()).filter(Boolean);if(!answers.length)throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요.');return {title:'오늘의 소중한 기억',body:answers.join('\n'),scene:answers.join(' ').slice(0,3000),mode:'local'};}throw new Error('단독 체험 화면에서는 AI 그림을 만들 수 없어요. 서버 실행과 API 키 연결이 필요해요.');}
+ const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(['illustration','scene-illustration'].includes(path)?135000:55000)});
  let result;try{result=await response.json();}catch{throw new Error('서버의 응답을 읽지 못했어요. 서버가 실행 중인지 확인해 주세요.');}if(!response.ok)throw new Error(result.error||'AI 연결에 실패했어요.');return result;
 }
 function read(text){
@@ -103,12 +107,16 @@ $('answer').oninput=()=>{if(state){state.answer=$('answer').value;scheduleSave()
 function sessionInput(turns=state.turns){return {turns,photos:state.photos,date:state.date,todayEvents:state.todayEvents||[]};}
 async function makeDraft(turns){
  if(!turns.some(t=>t.answer.trim()))throw new Error('짧은 이야기 하나만 남겨주시면 일기로 정리할 수 있어요.');
- const response=await api('draft',sessionInput(turns));state.turns=turns;state.answer='';state.draft={title:response.title,body:response.body,scene:response.scene};state.image='';state.imageScene='';
+ const response=await api('draft',sessionInput(turns));state.turns=turns;state.answer='';state.draft={title:response.title,body:response.body,scene:response.scene};state.dayNarrative=response.body;state.image='';state.imageScene='';state.imageEventId=null;state.sceneRecord=null;state.sceneCandidate=null;state.scenePreparationOpen=false;
+ let candidates;
+ try{const prepared=await api('scene-draft',{draft:state.draft,session:sessionInput(turns)});candidates=prepared.candidates||(prepared.candidate?[prepared.candidate]:[]);}catch{candidates=localExperienceEvents(sessionInput(turns));}
+ if(candidates?.length){state.experienceBundle=createExperienceBundle(candidates,state.draft.body);state.experienceBundle.sourceUtterances=experienceTurns(turns).map(t=>t.answer);if(state.experienceBundle.selectedEventId)state.draft.scene=state.experienceBundle.events[0].scene;}
+ else state.experienceBundle=null;
  $('draftNote').textContent=response.mode==='ai'?'내 이야기와 맞는지 편하게 읽어보세요.':'말씀해주신 이야기를 모았어요. 원하는 표현으로 고칠 수 있어요.';paintReview();view('review');await persist();
 }
 function advance({skip=false,finish=false}={}){
  if(busy)return;
- const answer=skip?'':state.answer.trim(),turns=[...state.turns,{question:state.question,answer}];
+ const answer=skip?'':state.answer.trim(),turns=[...state.turns,{question:state.question,answer,answeredAt:new Date().toISOString()}];
  task(async()=>{
  if(!skip&&!finish&&!answer)throw new Error('짧게 적어도 좋아요. 답하기 어려우면 ‘다른 이야기 할래요’를 눌러주세요.');
  if(finish||turns.length>=6){await finishToday(turns);return;}
@@ -123,24 +131,82 @@ function paintReview(){
  if(!state?.draft)return;
  $('reviewDate').textContent=readableDate(state.date);$('previewTitle').textContent=state.draft.title;$('previewBody').textContent=state.draft.body;$('previewScene').textContent=state.draft.scene;
  for(const id of ['title','body','scene'])$(id).value=state.draft[id];
- $('editPanel').hidden=true;$('editToggle').setAttribute('aria-expanded','false');
+ $('editPanel').hidden=true;$('editToggle').setAttribute('aria-expanded','false');$('scenePreparation').hidden=true;renderExperienceChoices();renderDialogue($('reviewDialogue'),conversationTranscript(state));
+ if(state.scenePreparationOpen&&state.experienceBundle?.selectedEventId)paintScenePreparation();
  const stale=state.image&&!currentImage(state);$('imageNotice').hidden=!stale;$('imageNotice').textContent='그림 장면을 바꿨어요. 새 장면으로 다시 그리거나, 글로 먼저 저장할 수 있어요.';
  $('draw').textContent=currentImage(state)?'맞아요, 그림일기 확인하기':'맞아요, 그림으로 남겨주세요';
 }
 $('editToggle').onclick=()=>{const open=$('editPanel').hidden;$('editPanel').hidden=!open;$('editToggle').setAttribute('aria-expanded',String(open));if(open)$('title').focus();};
-for(const id of ['title','body','scene'])$(id).oninput=()=>{state.draft[id]=$(id).value;scheduleSave();};
+for(const id of ['title','body','scene'])$(id).oninput=()=>{state.draft[id]=$(id).value;if(id==='scene'){state.sceneRecord=null;state.sceneCandidate=null;state.image='';state.imageScene='';const selected=state.experienceBundle?.events.find(e=>e.id===state.experienceBundle.selectedEventId);if(selected){selected.scene=state.draft.scene;selected.confirmed=false;}}scheduleSave();};
 $('applyEdits').onclick=()=>{if(!state.draft.title.trim()||!state.draft.body.trim()||!state.draft.scene.trim()){notify('제목과 이야기, 그림 장면이 비어 있지 않은지 확인해 주세요.',true);return;}paintReview();notify('수정한 이야기를 확인해 주세요.');persist();$('previewTitle').scrollIntoView({block:'start',behavior:'instant'});};
-async function draw(){
- if(!state.draft.title.trim()||!state.draft.body.trim()||!state.draft.scene.trim()){notify('이야기 내용을 먼저 확인해 주세요.',true);return;}
- if(currentImage(state)){paintResult();view('result');return;}
- await task(async()=>{const response=await api('illustration',state.draft);state.image=response.image;state.imageScene=state.draft.scene.trim();paintResult();view('result');await persist();},'이야기를 한 장의 그림으로 그리고 있어요…',{drawing:true});
+function selectedExperience(){return state?.experienceBundle?.events.find(event=>event.id===state.experienceBundle.selectedEventId);}
+function renderExperienceChoices(){
+ const bundle=state.experienceBundle;$('eventSelection').hidden=!bundle;if(!bundle)return;
+ $('eventChoices').replaceChildren();$('fullDayStory').textContent=state.dayNarrative||bundle.diaryNarrative;
+ for(const event of bundle.events){const button=document.createElement('button');button.type='button';button.className='event-choice';button.dataset.eventId=event.id;button.setAttribute('aria-pressed',String(bundle.selectedEventId===event.id));const heading=document.createElement('strong');heading.textContent=event.title;const summary=document.createElement('span');summary.textContent=event.scene.slice(0,180);button.append(heading,summary);button.onclick=()=>{if(bundle.selectedEventId===event.id)return;const selected=chooseExperience(bundle,event.id);state.sceneCandidate=selected;state.sceneRecord=null;state.image='';state.imageScene='';state.imageEventId=null;state.imageGeneration=null;state.scenePreparationOpen=false;state.sceneAnswer='';state.draft.title=selected.title;state.draft.body=selected.scene;state.draft.scene=selected.scene;paintReview();scheduleSave();};$('eventChoices').append(button);}
+ $('eventSelectionTitle').textContent=bundle.events.length>1?'어떤 내용을 그림일기로 만들고 싶으세요?':'이 이야기를 그림으로 남겨요';
+ $('eventSelectionNote').textContent=bundle.selectedEventId?'선택한 이야기의 부족한 내용만 함께 확인할게요.':'한 가지를 고르면 그 이야기로만 그림을 만들어요.';
+ if(!bundle.selectedEventId)$('previewScene').textContent='아래에서 그림으로 남길 이야기를 하나 골라주세요.';
 }
-$('draw').onclick=draw;
-function paintResult(){$('resultDate').textContent=readableDate(state.date);$('resultHeading').textContent=state.draft.title;$('resultBody').textContent=state.draft.body;$('illustration').src=currentImage(state);}
+function renderDialogue(container,conversation){container.replaceChildren();for(const turn of conversation?.turns||[]){const item=document.createElement('article');item.className='dialogue-turn';const label=document.createElement('small');label.textContent={today_story:'오늘 이야기',selected_event_details:'선택한 사건의 추가 확인',event_selection:'그림으로 남길 사건 선택',future_plans:'앞으로의 일정 · 오늘 경험과 분리',importance:'선택한 경험의 중요도'}[turn.phase]||'대화 기록';const question=document.createElement('p');question.className='dialogue-question';question.textContent=`기억잇다: ${turn.question}`;const answer=document.createElement('p');answer.textContent=`나: ${turn.answer||'(이 질문은 건너뛰었어요)'}`;item.append(label,question,answer);container.append(item);}}
+function putSelectedCandidate(candidate){
+ const bundle=state.experienceBundle;if(!bundle||candidate.id!==bundle.selectedEventId)throw new Error('선택한 이야기가 바뀌었어요. 다시 확인해 주세요.');
+ bundle.events=bundle.events.map(event=>event.id===candidate.id?candidate:event);state.sceneCandidate=candidate;state.sceneRecord=null;
+}
+function paintScenePreparation(){
+ const candidate=prepareExperience(state.sceneCandidate||selectedExperience());putSelectedCandidate(candidate);renderDialogue($('reviewDialogue'),conversationTranscript(state));
+ $('scenePreparation').hidden=false;state.scenePreparationOpen=true;
+ $('selectedSceneLabel').textContent=`선택한 이야기: ${candidate.title}`;
+ const next=collectionQuestion(candidate);$('sceneCollectionPanel').hidden=!next;$('sceneConfirmationPanel').hidden=!!next;$('confirmSceneDraw').hidden=!!next;
+ if(next){$('sceneQuestion').textContent=next.question;$('sceneAnswer').value=state.sceneAnswer||'';state.collectionField=next.field;sceneForm=null;}
+ else{
+  candidate.diaryNarrative=state.dayNarrative||state.experienceBundle.diaryNarrative||state.draft.body;candidate.supportingContext=state.experienceBundle.events.filter(e=>e.id!==candidate.id).map(e=>e.scene.slice(0,400));candidate.supportingContextStatus=candidate.supportingContext.length?'provided':'none';candidate.unusedEventIds=state.experienceBundle.events.filter(e=>e.id!==candidate.id).map(e=>e.id);
+  candidate.scene=composeExperienceScene(candidate);putSelectedCandidate(candidate);state.draft.scene=candidate.scene;state.draft.title=candidate.title;state.draft.body=selectedDiaryText(candidate);$('previewTitle').textContent=state.draft.title;$('previewBody').textContent=state.draft.body;
+  $('previewScene').textContent=candidate.scene;$('sceneSummary').textContent=`${candidate.place.name||'장소 미확인'} · ${candidate.people.map(p=>p.name).join(', ')} · ${candidate.activity||'활동 미확인'}\n${candidate.scene}\n모르거나 건너뛴 내용은 그대로 남기고 그림에 새 사실로 추가하지 않아요.`;
+  $('sceneConfirmed').checked=false;
+  sceneForm=mountSceneForm($('sceneFields'),candidate,raw=>{putSelectedCandidate(raw);state.image='';state.imageScene='';$('sceneConfirmed').checked=false;scheduleSave();});
+ }
+}
+async function draw(){
+ if(!state.draft.title.trim()||!state.draft.body.trim()){notify('이야기 내용을 먼저 확인해 주세요.',true);return;}
+ if(currentImage(state)){paintResult();view('result');return;}
+ if(state.experienceBundle&&!state.experienceBundle.selectedEventId){notify('그림으로 남길 이야기를 하나 골라주세요.');$('eventSelectionTitle').focus();return;}
+ await task(async()=>{
+  if(!state.experienceBundle){const response=await api('scene-draft',{draft:state.draft,session:sessionInput(state.turns)});const candidates=response.candidates||(response.candidate?[response.candidate]:[]);state.experienceBundle=createExperienceBundle(candidates,state.draft.body);renderExperienceChoices();if(!state.experienceBundle.selectedEventId)return;}
+  state.sceneCandidate=selectedExperience();paintScenePreparation();$('scenePreparationTitle').focus();await persist();
+ },'그림으로 남길 이야기를 함께 확인해요…');
+}
+$('draw').onclick=draw;$('readEventSelection').onclick=()=>read($('eventSelectionTitle').textContent);
+$('closeScenePreparation').onclick=()=>{$('scenePreparation').hidden=true;state.scenePreparationOpen=false;scheduleSave();};
+$('sceneAnswer').oninput=()=>{state.sceneAnswer=$('sceneAnswer').value;scheduleSave();};
+function submitSceneAnswer(override){
+ if(busy)return;const candidate=structuredClone(state.sceneCandidate),next=collectionQuestion(candidate),answer=typeof override==='string'?override:$('sceneAnswer').value.trim();if(!next)return;
+ if(!answer){notify('짧게 말씀해 주시거나 기억나지 않음을 선택해 주세요.');return;}
+ task(async()=>{const response=await api('scene-answer',{candidate,field:next.field,answer});putSelectedCandidate(response.candidate);state.sceneAnswer='';paintScenePreparation();await persist();},'말씀하신 내용을 남기고 있어요…');
+}
+$('sceneReply').onclick=()=>submitSceneAnswer();$('sceneUnknown').onclick=()=>submitSceneAnswer('잘 모르겠어요.');$('sceneDecline').onclick=()=>submitSceneAnswer('이 질문은 건너뛸게요.');$('readSceneQuestion').onclick=()=>read($('sceneQuestion').textContent);
+$('confirmSceneDraw').onclick=()=>task(async()=>{if(!sceneForm||!$('sceneConfirmed').checked)throw new Error('선택한 장면의 내용이 맞는지 확인해 주세요.');const record=sceneForm.confirm(true);chooseExperience(state.experienceBundle,record.id);state.sceneRecord=record;state.sceneCandidate=record;putSelectedCandidate(record);state.sceneRecord=record;state.draft.scene=record.scene;state.draft.title=record.title;try{const text=await api('scene-text',record);state.draft.body=text.body;}catch{state.draft.body=selectedDiaryText(record);}const response=await api('scene-illustration',record);state.image=response.image;state.imageScene=record.scene;state.imageEventId=record.id;state.imageGeneration=response.generation;state.scenePreparationOpen=false;paintResult();view('result');await persist();},'확인한 내용으로 그림을 그리고 있어요…',{drawing:true});
+$('verifyImage').onclick=async()=>{
+ if(!state?.draft||!currentImage(state)){notify('먼저 그림을 준비해 주세요.');return;}
+ await persist();
+ try{sessionStorage.setItem('memory-verification-handoff-v1',JSON.stringify({scene:state.draft.scene,image:currentImage(state),record:state.sceneRecord||null,generation:state.imageGeneration||null}));}
+ catch{notify('그림이 커서 검증 화면으로 옮기지 못했어요. 그림을 파일로 보관한 뒤 체험 화면에서 직접 고를 수 있어요.',true);return;}
+ location.href=STANDALONE?'verification-demo.html#custom':'/verification#custom';
+};
+function paintResult(){paintImportance();$('resultDate').textContent=readableDate(state.date);$('resultHeading').textContent=state.draft.title;$('resultBody').textContent=state.draft.body;$('illustration').src=currentImage(state);}
+function paintImportance(){
+ const bundle=state.experienceBundle;$('experienceRating').hidden=!bundle?.selectedEventId;if(!bundle?.selectedEventId)return;
+ $('ratingStars').replaceChildren();const rating=bundle.importance;
+ for(let value=1;value<=5;value++){const button=document.createElement('button');button.type='button';button.textContent='★';button.dataset.rating=String(value);button.setAttribute('aria-label',`${value}점`);button.setAttribute('aria-pressed',String(rating.status==='provided'&&rating.value===value));button.className=rating.status==='provided'&&value<=rating.value?'selected':'';button.onclick=()=>{setImportance(value);};$('ratingStars').append(button);}
+ $('ratingStatus').textContent=rating.status==='provided'?`이 경험의 중요도를 ${rating.value}점으로 남겼어요.`:rating.status==='skipped'?'별점은 미평가로 남겨둘게요.':'별점을 골라주세요. 나중에 매겨도 괜찮아요.';
+}
+function setImportance(value){const bundle=state.experienceBundle,event=selectedExperience();if(!event)return;const status=value===null?'skipped':'provided';bundle.importance={eventId:event.id,value,status,answeredAt:new Date().toISOString()};event.importanceRating=value;event.importanceStatus=status;paintImportance();scheduleSave();}
+$('skipRating').onclick=()=>setImportance(null);
 $('resultEdit').onclick=()=>{paintReview();view('review');$('editToggle').click();};
-$('redraw').onclick=async()=>{if(await ask('그림을 다시 그릴까요?','같은 이야기로 새로운 그림을 만들어요. 추가 API 비용이 발생해요.','다시 그리기')){const old=state.image;const oldScene=state.imageScene;await task(async()=>{const response=await api('illustration',state.draft);state.image=response.image;state.imageScene=state.draft.scene.trim();paintResult();await persist();},'새로운 그림을 그리고 있어요…',{drawing:true});if(!state.image){state.image=old;state.imageScene=oldScene;}}};
+$('redraw').onclick=async()=>{if(await ask('그림을 다시 그릴까요?','같은 이야기로 새로운 그림을 만들어요. 추가 API 비용이 발생해요.','다시 그리기')){const old=state.image;const oldScene=state.imageScene;await task(async()=>{const response=state.sceneRecord?await api('scene-illustration',state.sceneRecord):await api('illustration',state.draft);state.image=response.image;state.imageScene=state.draft.scene.trim();if(response.generation)state.imageGeneration=response.generation;if(state.sceneRecord)state.imageEventId=state.sceneRecord.id;paintResult();await persist();},'새로운 그림을 그리고 있어요…',{drawing:true});if(!state.image){state.image=old;state.imageScene=oldScene;}}};
 $('backToTalk').onclick=backToToday;
 async function saveEntry(textOnly=false){
+ if(!textOnly&&state.experienceBundle?.importance.status==='not_asked'){notify('이 경험의 별점을 고르거나 나중에 매기기를 선택해 주세요.');$('experienceRating').scrollIntoView({block:'center'});return;}
  await task(async()=>{const entry=makeEntry(state,state.entryId||(state.entryId=crypto.randomUUID()));if(textOnly){entry.image='';entry.imageKind=null;}else if(!entry.image)throw new Error('저장할 그림이 없어요. 글로 먼저 저장할 수 있어요.');
  await putEntry(entry);selectedEntry=entry;await clearWorking();$('doneDescription').textContent=textOnly?'그림이 없어도 소중한 하루의 기록이에요. 내 일기장에서 다시 만날 수 있어요.':'나눈 이야기와 그림을 내 일기장에 담았어요. 언제든 다시 펼쳐보세요.';view('done');
  },'일기장에 소중히 담고 있어요…');
@@ -158,12 +224,23 @@ async function showHistory(){await task(async()=>{const entries=await listEntrie
  },'일기장을 펼치고 있어요…');}
 function openEntry(entry){selectedEntry=entry;$('detailCard').replaceChildren();const date=document.createElement('p');date.className='paper-date';date.textContent=readableDate(entry.date);const h=document.createElement('h1');h.id='detailTitle';h.tabIndex=-1;h.textContent=entry.title;$('detailCard').append(date,h);
  if(typeof entry.image==='string'&&/^data:image\/jpeg;base64,/.test(entry.image)){const figure=document.createElement('figure');const img=document.createElement('img');img.src=entry.image;img.alt='오늘 이야기로 AI가 그린 삽화';const caption=document.createElement('figcaption');caption.textContent='AI로 그린 그림 · 실제 사진이 아니에요.';figure.append(img,caption);$('detailCard').append(figure);}
- const body=document.createElement('p');body.className='diary-body';body.textContent=entry.body;$('detailCard').append(body);view('detail');}
+ const body=document.createElement('p');body.className='diary-body';body.textContent=entry.body;$('detailCard').append(body);
+ if(entry.conversation?.turns?.length){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='어떤 이야기를 나눴는지 보기';const content=document.createElement('div');renderDialogue(content,entry.conversation);details.append(summary,content);$('detailCard').append(details);}
+ if(entry.experiences){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='그림으로 고른 이야기와 함께 보관한 이야기';details.append(summary);for(const event of entry.experiences.events){const p=document.createElement('p');p.textContent=`${event.id===entry.experiences.selectedEventId?'그림으로 남김':'함께 보관'} · ${event.title}: ${event.scene}`;details.append(p);}$('detailCard').append(details);}
+ if(entry.generation?.usedInformation){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='그림에 실제로 사용한 정보 보기';const content=document.createElement('p');content.textContent=entry.generation.usedInformation.facts.map(f=>f.text).join('\n');details.append(summary,content);$('detailCard').append(details);}
+ view('detail');}
 $('historyButton').onclick=showHistory;$('doneHistory').onclick=showHistory;$('detailBack').onclick=showHistory;$('historyReturn').onclick=()=>{notify('');view(state?.stage||'home');};
 $('readSaved').onclick=()=>read(`${selectedEntry.title}. ${selectedEntry.body}`);$('exportSaved').onclick=()=>download(selectedEntry);
 $('deleteSaved').onclick=async()=>{if(!await ask('이 일기를 지울까요?','삭제한 일기는 다시 복구하기 어려워요. 보관하려면 먼저 파일로 내려받아 주세요.','일기 삭제하기'))return;await task(async()=>{await removeEntry(selectedEntry.id);selectedEntry=null;},'일기를 정리하고 있어요…');if(!selectedEntry)showHistory();};
 $('clearDraft').onclick=async()=>{if(!state&&!savedDraft){notify('작성 중인 이야기가 없어요.');return;}if(await ask('쓰던 이야기를 지울까요?','저장한 일기는 남아 있어요. 작성 중인 사진과 대화만 지워져요.','쓰던 이야기 지우기'))await task(async()=>{await clearWorking();view('home');},'쓰던 이야기를 정리하고 있어요…');};
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+$('sceneMicrophone').hidden=!SpeechRecognition;
+$('sceneMicrophone').onclick=()=>{
+ if(!SpeechRecognition)return;if(recording){stopVoice();return;}stopVoice();recognition=new SpeechRecognition();recognition.lang='ko-KR';recognition.continuous=false;recognition.interimResults=false;const before=$('sceneAnswer').value;
+ recognition.onstart=()=>{recording=true;$('sceneMicrophone').textContent='말하기 끝내기';};
+ recognition.onresult=event=>{if(busy||active!=='review'||$('sceneCollectionPanel').hidden)return;state.sceneAnswer=(before+(before?' ':'')+event.results[0][0].transcript).slice(0,1000);$('sceneAnswer').value=state.sceneAnswer;scheduleSave();};
+ recognition.onend=()=>{recording=false;$('sceneMicrophone').textContent='마이크로 말하기';};recognition.onerror=()=>notify('음성 입력이 어려워요. 글로 입력하거나 휴대폰 키보드의 음성 입력을 사용할 수 있어요.');recognition.start();
+};
 function syncSpeechUI(){
  $('microphone').hidden=!SpeechRecognition;$('microphone').classList.toggle('listening',recording);$('microphone').setAttribute('aria-pressed',String(recording));$('microphone').textContent=recording?'말하기 끝내기':'마이크로 말하기';
  if(!recording)$('speechHint').textContent=SpeechRecognition?'말한 내용은 입력창에서 고칠 수 있어요.':'이 브라우저에서는 글로 입력해 주세요. 스마트폰 키보드의 음성 입력도 좋아요.';

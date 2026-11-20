@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {validateSession,localReply,localDraft,validateDraft} from '../diary.js';
 import {createApp} from '../server.js';
 test('사진 없는 시작과 다중 사진 시작',()=>{
- assert.match(localReply({turns:[],photos:[]}).question,/오늘 기억/);
+ assert.match(localReply({turns:[],photos:[]}).question,/특히 기억에 남거나/);
  assert.match(localReply({turns:[],photos:['a','b']}).question,/사진/);
 });
 test('이미 말한 동행자를 다시 묻지 않고 충분하면 조기 마무리',()=>{
@@ -43,7 +43,7 @@ test('실제 AI 응답의 종료 신호 전달, 빈 대화 조기 종료 방지'
  assert.equal((await req('/api/question',{turns:[{question:'오늘은요?',answer:'산책했어요.'}]})).data.ready,true);
 });
 test('인증 및 잘못된 이미지 응답을 성공으로 처리하지 않는다',async t=>{
- const denied=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>new Response('denied',{status:401})});assert.match((await denied('/api/question',{turns:[]})).data.error,/키/);
+ const denied=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>new Response('denied',{status:401})});assert.match((await denied('/api/question',{turns:[{question:'오늘은요?',answer:'공원에서 산책했어요.'}]})).data.error,/키/);
  const broken=await running(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>Response.json({data:[]})});assert.equal((await broken('/api/illustration',{title:'t',body:'b',scene:'s'})).status,502);
 });
 

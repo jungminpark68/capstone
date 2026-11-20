@@ -14,8 +14,8 @@ test('내일 날짜는 월말·연말·윤년을 처리하고 잘못된 날짜�
  assert.equal(nextDate(date),'2027-01-01');assert.equal(nextDate('2028-02-28'),'2028-02-29');assert.equal(nextDate('2026-02-28'),'2026-03-01');assert.equal(validDate('2026-02-30'),false);
  assert.throws(()=>calendarEvent({...event,time:'25:00'}));assert.throws(()=>calendarEvent({...event,title:' '}));
 });
-test('캘린더 첫 질문은 예정과 실제를 구분하고 답변이 바뀌면 실제 경험을 따른다',()=>{
- const first=localReply({turns:[],todayEvents:[event]});assert.match(first.question,/병원 방문/);assert.match(first.question,/실제로/);
+test('예정 일정이 있어도 기억에 남는 경험으로 시작하고 실제 답변을 따른다',()=>{
+ const first=localReply({turns:[],todayEvents:[event]});assert.match(first.question,/그림일기로 남기고 싶은/);assert.doesNotMatch(first.question,/병원 방문/);
  const next=localReply({todayEvents:[event],turns:[{question:first.question,answer:'병원은 취소하고 딸과 공원에서 산책했어요.'}]});
  assert.doesNotMatch(next.question,/병원|누구/);assert.match(next.question,/걸으면서/);
 });
@@ -35,7 +35,7 @@ test('내일 일정 입력·수정 중인 상태는 복원하고 기존 세션�
 });
 test('HTTP: 일정 기반 시작, 내일 추출, 경험 분리와 입력 오류',async t=>{
  const req=await request(t);
- const first=await req('question',{date,todayEvents:[event],turns:[]});assert.equal(first.status,200);assert.match(first.data.question,/병원 방문/);
+ const first=await req('question',{date,todayEvents:[event],turns:[]});assert.equal(first.status,200);assert.match(first.data.question,/그림일기로 남기고 싶은/);
  const plans=await req('plans',{date,text:'내일 오후 3시에 치과에 가요.'});assert.equal(plans.status,200);assert.equal(plans.data.events[0].time,'15:00');
  const draft=await req('draft',{date,todayEvents:[event],turns:[{question:first.data.question,answer:'집에서 책을 읽었어요. 내일 치과에 가요.'}]});assert.equal(draft.status,200);assert.doesNotMatch(draft.data.body,/치과|병원/);
  for(const data of [{date:'2026-02-30',text:'치과'},{date,text:''},{date,text:'a'.repeat(2001)}])assert.equal((await req('plans',data)).status,400);
@@ -123,6 +123,6 @@ test('HTTP: 일정 문맥과 완료 상태 입력을 검증한다',async t=>{
  for(const extra of [{turns:[{question:'질문',answer:1}]},{turns:Array(9).fill({question:'q',answer:'a'})},{todayEvents:[{...event,completed:'yes'}]},{todayEvents:[{...event,date:'2027-01-01'}]}])assert.equal((await req('plans',{...input,...extra})).status,400);
 });
 test('완료한 일정은 첫 질문에서 다시 수행 여부를 묻지 않는다',()=>{
- const first=localReply({turns:[],todayEvents:[{...event,completed:true},{...event,title:'은행 방문',completed:false}]});assert.match(first.question,/은행 방문/);assert.doesNotMatch(first.question,/병원/);
+ const first=localReply({turns:[],todayEvents:[{...event,completed:true},{...event,title:'은행 방문',completed:false}]});assert.match(first.question,/그림일기로 남기고 싶은/);assert.doesNotMatch(first.question,/병원|은행/);
  const all=localReply({turns:[],todayEvents:[{...event,completed:true}]});assert.doesNotMatch(all.question,/실제로|병원/);
 });

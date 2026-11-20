@@ -1,0 +1,7 @@
+# Main small-verifier path. Use the PyTorch build matching your CUDA runtime.
+torch>=2.6,<3
+torchvision>=0.21,<1
+transformers==5.23.0
+Pillow>=10,<13
+fastapi>=0.115,<1
+uvicorn>=0.34,<1

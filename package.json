@@ -1,6 +1,6 @@
 {
   "name": "gieok-itda-diary",
-  "version": "0.8.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "test": "node --test --test-isolation=none",
-    "build:demo": "node scripts/build-demo.js"
+    "build:demo": "node scripts/build-demo.js",
+    "build:verification-demo": "node scripts/build-verification-demo.js"
   }
 }

@@ -4,6 +4,22 @@
 
 [버전별 수정 내역 보기](CHANGELOG.md)
 
+## 한 가지 경험으로 완성하는 그림일기 · v0.13.0
+
+기억에 남는 경험으로 대화를 시작하고, 특별한 일이 없다면 일상 이야기로 넓힙니다. 여러 사건이 나오면 **어떤 내용을 그림일기로 만들고 싶으세요?**에서 하나를 고릅니다. 고른 사건의 부족한 정보만 한 번에 한 질문씩 확인한 뒤 글과 그림 한 개를 만듭니다. 완성된 그림 아래의 별점은 그 경험의 중요도입니다. 다른 사건의 그림이나 별점을 자동으로 만들지 않습니다.
+
+선택하지 않은 사건과 전체 이야기·원문 답변도 보관합니다. 일기장에서 **어떤 이야기를 나눴는지 보기**, **그림으로 고른 이야기와 함께 보관한 이야기**, **그림에 실제로 사용한 정보 보기**를 펼칠 수 있습니다. JSON 내보내기에는 `experiences`, `conversation`, `matchingContext`, `generation.usedInformation`이 들어갑니다. 미확인 사건은 미확인 후보로 표시하며, 질문에 등장한 내용을 실제 경험으로 취급하지 않습니다.
+
+교수 설명용 가상 예시는 서버 실행 후 `http://localhost:3000/example`에서 볼 수 있습니다. 색연필 그림 한 장, 선택한 경험의 정보, 실제 앱에서 사용할 질문 예시와 미선택 사건의 보관 방식을 함께 보여줍니다. `public/diary-example.html`을 직접 열어도 예시를 볼 수 있습니다.
+
+서버 없이 `demo.html`로도 사건 선택·추가 질문·글 저장을 체험할 수 있습니다. 실제 AI 문장 정리와 이미지 생성은 서버의 API 연결이 필요합니다. [상세 흐름과 데이터 원칙](docs/diary-generation-flow.md)
+
+## 한국어 임베딩 기반 자체 판정기 · v0.12.0
+
+`npm start` 후 `http://localhost:3000/verification`에서 실제 그림을 검토하고 학습 자료를 내려받을 수 있습니다. BGE-M3 한국어 문장 특징과 SigLIP2 그림 패치를 연결해 일치·불일치·판단 불가를 학습하는 코드를 추가했습니다. 두 인코더는 고정하고 판정 모듈만 학습합니다. 매칭팀의 사실별 임베딩으로 교체할 수 있으며 교체 후 특징 재생성과 판정 모듈 재학습이 필요합니다.
+
+실제 사전학습 인코더의 입력 처리와 소프트웨어 학습 경로를 확인했습니다. 실제 사람 정답 자료·연구용 학습 가중치·정확도 결과는 아직 없습니다. `verification-demo.html`의 네 가지 예시는 사전 주석입니다. [Kaggle 실행·학습·앱 연결 안내](ml/README.md) · [검증 화면 안내](docs/verification-prototype.md)
+
 
 ## 같은 날 여러 시간과 예외 표현 · v0.8.0
 
@@ -169,3 +185,19 @@ OpenAI 공식 SDK에서 `gpt-image-1`은 **2026-10-23 종료**로 안내합니�
 공식 근거: https://github.com/openai/openai-node/blob/master/src/resources/images.ts
 
 새 모델의 실제 사용 가능 여부는 해당 API 프로젝트의 접근 권한과 결제 상태에 따라 별도로 확인해야 합니다. 기본 이미지 요청 옵션(1024×1024, low, JPEG)은 공식 SDK의 현재 지원 범위에 맞춥니다. 이 저장소의 모의 API 테스트는 실제 생성 성공이나 가격을 보장하지 않습니다.
+
+
+## 그림일기 장면 검증 연구실 (v0.10)
+
+`npm start` 후 `/verification`에서 확인한 장면 → 생성 조건 → 그림 검토 → 오류 집계를 체험합니다. API 없는 단일 파일은 `verification-demo.html`입니다. [수집 정보·필수 질문](docs/diary-data-and-questions.md), [실행과 지표 정의](docs/verification-prototype.md)를 참고하세요. 예시 주석과 실제 AI·사람 판정을 분리하며 자체 학습 모델의 성능 결과는 아닙니다.
+
+
+## 메인 장면 생성과 자체 판정기 실험 준비 (v0.11)
+
+일반 앱도 장면 정보 확인 후 구조화 생성 경로를 사용합니다. 매칭에는 전체 이야기와 메인 장면을 분리해서 넘깁니다. `/verification`에서 생성 방식·화풍·품질을 비교하고 직접 사람 판정 자료를 모을 수 있습니다.
+
+- [한국어 인코더 후보·매칭팀 모델 공유 설계](docs/model-selection-and-sharing.md)
+- [Kaggle·Colab 학습과 API 비교 실행 방법](ml/README.md)
+- [Kaggle 노트북](ml/notebooks/memory_connect_kaggle.ipynb), [Colab 노트북](ml/notebooks/memory_connect_colab.ipynb)
+
+모델은 아직 최종 선정하지 않았고 실제 학습·성능 결과는 없습니다. `ml/diary_verifier/shared_encoder.py`는 교체용 인코더 계약과 학습할 연결부이며, 무작위 초기 연결부를 완성된 판정기로 서비스하지 않습니다. `/api/scene-draft`, `/api/generation-plan`, `/api/scene-illustration`을 추가했고 기존 삽화 API는 이전 클라이언트 호환용으로 유지합니다.
