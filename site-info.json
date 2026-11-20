@@ -1,0 +1,8 @@
+{
+  "version": "0.13.0",
+  "kind": "static_preview",
+  "contains_real_user_records": false,
+  "new_ai_image_generation": false,
+  "demo": "client_side_only",
+  "example": "fictional_professor_demo"
+}
