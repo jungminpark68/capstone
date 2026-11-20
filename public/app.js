@@ -4,6 +4,7 @@ import {getDraft,putDraft,removeDraft,putEntry,listEntries,removeEntry,listEvent
 import {localDate,readableDate,newSession,currentImage,makeEntry,restorable,conversationTranscript} from './state.js';
 import {mountSceneForm} from './scene-form.js';
 import {localExperienceEvents,createExperienceBundle,chooseExperience,prepareExperience,collectionQuestion,applyCollectionAnswer,composeExperienceScene,selectedDiaryText} from './experience-flow.js';
+import {renderDiaryDetail,diaryImageSource} from './diary-view.js';
 const STANDALONE=false;
 if(STANDALONE)document.querySelectorAll('a[href="/verification"]').forEach(link=>link.href='verification-demo.html');
 const $=id=>document.getElementById(id);
@@ -218,17 +219,11 @@ $('exportReview').onclick=()=>{try{download(makeEntry(state,'export'));}catch(e)
 async function showHistory(){await task(async()=>{const entries=await listEntries();$('diaries').replaceChildren();
  if(!entries.length){const card=document.createElement('div');card.className='empty-state';const h=document.createElement('h2');h.textContent='첫 번째 이야기를 기다리고 있어요';const p=document.createElement('p');p.textContent='오늘 드신 음식이나 잠깐의 산책도 좋은 일기가 돼요.';const button=document.createElement('button');button.className='primary';button.textContent='이야기 시작하기';button.onclick=()=>view('home');card.append(h,p,button);$('diaries').append(card);}
  for(const entry of entries){const card=document.createElement('article');card.className='diary-card';
- if(typeof entry.image==='string'&&/^data:image\/jpeg;base64,/.test(entry.image)){const img=document.createElement('img');img.src=entry.image;img.alt='AI가 그린 일기 삽화';img.loading='lazy';card.append(img);}else{const cover=document.createElement('div');cover.className='text-cover';cover.textContent='오늘의 이야기';card.append(cover);}
+ if(diaryImageSource(entry.image)){const img=document.createElement('img');img.src=entry.image;img.alt='AI가 그린 일기 삽화';img.loading='lazy';card.append(img);}else{const cover=document.createElement('div');cover.className='text-cover';cover.textContent='오늘의 이야기';card.append(cover);}
  const content=document.createElement('div');content.className='diary-card-content';const date=document.createElement('time');date.dateTime=entry.date;date.textContent=readableDate(entry.date);const heading=document.createElement('h2');heading.textContent=entry.title;const excerpt=document.createElement('p');excerpt.textContent=entry.body;const button=document.createElement('button');button.className='secondary';button.textContent='일기 펼쳐보기';button.setAttribute('aria-label',`${entry.title} 일기 펼쳐보기`);button.onclick=()=>openEntry(entry);content.append(date,heading,excerpt,button);card.append(content);$('diaries').append(card);}
  view('history');
  },'일기장을 펼치고 있어요…');}
-function openEntry(entry){selectedEntry=entry;$('detailCard').replaceChildren();const date=document.createElement('p');date.className='paper-date';date.textContent=readableDate(entry.date);const h=document.createElement('h1');h.id='detailTitle';h.tabIndex=-1;h.textContent=entry.title;$('detailCard').append(date,h);
- if(typeof entry.image==='string'&&/^data:image\/jpeg;base64,/.test(entry.image)){const figure=document.createElement('figure');const img=document.createElement('img');img.src=entry.image;img.alt='오늘 이야기로 AI가 그린 삽화';const caption=document.createElement('figcaption');caption.textContent='AI로 그린 그림 · 실제 사진이 아니에요.';figure.append(img,caption);$('detailCard').append(figure);}
- const body=document.createElement('p');body.className='diary-body';body.textContent=entry.body;$('detailCard').append(body);
- if(entry.conversation?.turns?.length){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='어떤 이야기를 나눴는지 보기';const content=document.createElement('div');renderDialogue(content,entry.conversation);details.append(summary,content);$('detailCard').append(details);}
- if(entry.experiences){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='그림으로 고른 이야기와 함께 보관한 이야기';details.append(summary);for(const event of entry.experiences.events){const p=document.createElement('p');p.textContent=`${event.id===entry.experiences.selectedEventId?'그림으로 남김':'함께 보관'} · ${event.title}: ${event.scene}`;details.append(p);}$('detailCard').append(details);}
- if(entry.generation?.usedInformation){const details=document.createElement('details');details.className='disclosure';const summary=document.createElement('summary');summary.textContent='그림에 실제로 사용한 정보 보기';const content=document.createElement('p');content.textContent=entry.generation.usedInformation.facts.map(f=>f.text).join('\n');details.append(summary,content);$('detailCard').append(details);}
- view('detail');}
+function openEntry(entry){selectedEntry=entry;renderDiaryDetail($('detailCard'),entry);view('detail');}
 $('historyButton').onclick=showHistory;$('doneHistory').onclick=showHistory;$('detailBack').onclick=showHistory;$('historyReturn').onclick=()=>{notify('');view(state?.stage||'home');};
 $('readSaved').onclick=()=>read(`${selectedEntry.title}. ${selectedEntry.body}`);$('exportSaved').onclick=()=>download(selectedEntry);
 $('deleteSaved').onclick=async()=>{if(!await ask('이 일기를 지울까요?','삭제한 일기는 다시 복구하기 어려워요. 보관하려면 먼저 파일로 내려받아 주세요.','일기 삭제하기'))return;await task(async()=>{await removeEntry(selectedEntry.id);selectedEntry=null;},'일기를 정리하고 있어요…');if(!selectedEntry)showHistory();};
