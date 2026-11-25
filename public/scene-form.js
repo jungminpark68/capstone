@@ -1,7 +1,7 @@
 import {PLACE_TYPES,TIME_TYPES,validateSceneRecord} from './diary-record.js';
 
 export function mountSceneForm(container,candidate,onChange=()=>{}){
- const record=JSON.parse(JSON.stringify(candidate));container.replaceChildren();
+ const record=JSON.parse(JSON.stringify(candidate));record.collectionStatus={...(record.collectionStatus||{})};container.replaceChildren();
  const node=(tag,text)=>{const e=document.createElement(tag);if(text)e.textContent=text;return e;};
  const field=(parent,label,value,key,options=null)=>{const wrap=node('label',label),input=node(options?'select':'input');input.dataset.sceneField=key;if(options)for(const [v,t] of Object.entries(options)){const option=node('option',t);option.value=v;input.append(option);}input.value=value??'';if(!options)input.maxLength=300;wrap.append(input);parent.append(wrap);return input;};
  const title=field(container,'이 장면의 제목',record.title,'title');title.maxLength=120;
@@ -15,6 +15,7 @@ export function mountSceneForm(container,candidate,onChange=()=>{}){
  const renderPeople=()=>{
   people.replaceChildren();record.people.forEach((person,index)=>{const box=node('fieldset'),legend=node('legend',`인물 ${String.fromCharCode(65+index)}`);box.append(legend);
    const name=field(box,'누구인가요?',person.name,'personName'),action=field(box,'이분은 무엇을 했나요?',person.action,'personAction'),visual=field(box,'그림에서 구별할 설정',person.visual,'personVisual');
+   action.dataset.personId=person.id;
    const hint=node('p','옷 색 등은 그림에서 구별할 약속이에요. 실제 모습과 같다는 뜻은 아니에요.');hint.className='helper';box.append(hint);
    for(const [input,key] of [[name,'name'],[action,'action'],[visual,'visual']])input.addEventListener('input',()=>person[key]=input.value);
    const remove=node('button','이 인물 빼기');remove.type='button';remove.className='text-button';remove.onclick=()=>{if(record.people.length<=1)return;record.people.splice(index,1);renderPeople();changed();};box.append(remove);people.append(box);
@@ -30,6 +31,16 @@ export function mountSceneForm(container,candidate,onChange=()=>{}){
  const read=()=>({...record,title:title.value,activity:activity.value,topic:topic.value,emotion:{...(record.emotion||{labels:[],status:'not_asked'}),text:emotion.value,status:emotion.value?'provided':record.emotion?.status||'not_asked'},eventDate:date.value||null,dateStatus:date.value?'known':'unknown',timeOfDay:time.value,place:{...record.place,name:placeName.value,type:place.value},scene:scene.value,
   memoryCue:cue.value,memoryCueStatus:cueStatus.value,confirmed:confirmed.checked,objects:objects.value.split(/\r?\n/).filter(line=>line.trim()).map(line=>{const parts=line.split('|').map(part=>part.trim());return {name:parts[0],count:parts[1]?Number(parts[1]):null};})});
  function changed(){confirmed.checked=false;onChange(read());}
- container.oninput=event=>{if(event.target===confirmed)return;changed();};
+ objects.dataset.sceneField='objects';
+ container.oninput=event=>{
+  if(event.target===confirmed)return;
+  const key=event.target.dataset.sceneField,s=record.collectionStatus;
+  if(['activity','topic'].includes(key))s[key]=event.target.value.trim()?'provided':'unknown';
+  if(key==='placeName'||key==='placeType')s.place=place.value==='unknown'?'unknown':'provided';
+  if(key==='personName')s.people='provided';
+  if(key==='personAction')s['action:'+event.target.dataset.personId]=event.target.value.trim()?'provided':'unknown';
+  if(key==='objects')s.objects=event.target.value.trim()?'provided':'none';
+  changed();
+ };
  return {read,confirm:(explicitConfirmation)=>validateSceneRecord({...read(),confirmed:typeof explicitConfirmation==='boolean'?explicitConfirmation:confirmed.checked})};
 }

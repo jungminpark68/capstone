@@ -30,6 +30,7 @@ export function makeEntry(state,id){
  if(!state?.draft?.title?.trim()||!state.draft.body?.trim())throw new Error('일기의 제목과 내용을 확인해 주세요.');
  const image=currentImage(state);
  const entry={id,date:state.date,title:state.draft.title.trim(),body:state.draft.body.trim(),scene:state.draft.scene?.trim()||'',image,imageKind:image?'ai':null,savedAt:new Date().toISOString()};
+ if(state.imageSkippedForTest)entry.imageGenerationSkippedForTest=true;
  if(state.sceneRecord){const importance=state.experienceBundle?.importance;entry.sceneRecord=validateSceneRecord({...state.sceneRecord,diaryNarrative:state.dayNarrative||state.experienceBundle?.diaryNarrative||state.draft.body,...(importance?.eventId===state.sceneRecord.id?{importanceRating:importance.value,importanceStatus:importance.status}:{})});entry.matching=matchingMetadata(entry.sceneRecord);}
  if(state.experienceBundle){entry.experiences=structuredClone(state.experienceBundle);entry.experiences.diaryNarrative=state.dayNarrative||state.experienceBundle.diaryNarrative||state.draft.body;if(entry.sceneRecord)entry.experiences.events=entry.experiences.events.map(event=>event.id===entry.sceneRecord.id?entry.sceneRecord:event);entry.matchingContext=experienceMatching(entry.experiences);}
  if(image&&state.imageGeneration)entry.generation=state.imageGeneration;

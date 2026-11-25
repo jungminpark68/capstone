@@ -4,6 +4,12 @@
 
 [버전별 수정 내역 보기](CHANGELOG.md)
 
+## 사건 JSON 전달 · v0.18.0
+
+완성 화면 또는 저장한 일기에서 **매칭용 JSON 전달하기 → JSON 파일 받기**를 누르면 memory-itda-diary-events-v1 형식으로 선택 사건과 다른 사건, 다섯 요소와 선택 경험의 별점을 전달합니다. [양식·VS Code 시연 안내](contracts/README.md)와 [JSON Schema](contracts/diary-events-v1.schema.json)를 함께 확인하세요.
+
+설정 → 개발·시연용 설정 → **테스트: 그림 생성 건너뛰기**를 켜면 이미지 요청 없이 같은 흐름을 확인할 수 있습니다. AI 대화 비용은 별도이며 완전 무료 반복 확인은 키 없는 모드나 localhost:3000/demo.html을 사용합니다. 테스트 설정은 기본 꺼짐이고, 켜져 있을 때 화면에 배너가 표시됩니다.
+
 ## 무료 색연필풍 자료와 순정·LoRA 비교 · v0.16.0
 
 두 개의 소스 포함 Kaggle 노트북으로 SDXL 색연필풍 자료 생성·사람 검토와, 같은 공개 VLM의 순정/일반 LoRA/오류 대조 LoRA 비교를 실행합니다. 이미지당 API 요금 없이 GPU 할당 범위에서 생성하고 장수를 늘려 이어 만들 수 있습니다. 개발셋으로 모델을 선택하고 봉인한 뒤 최종 시험을 별도로 실행합니다. [실행·학습 설정 안내](docs/kaggle-pretrained-lora-guide.md)

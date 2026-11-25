@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "memory-itda-diary-events-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "diaryId",
+    "experienceDate",
+    "selectedEvent",
+    "otherEvents"
+  ],
+  "properties": {
+    "schema": {
+      "const": "memory-itda-diary-events-v1"
+    },
+    "diaryId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "experienceDate": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "selectedEvent": {
+      "$ref": "#/$defs/selectedEvent"
+    },
+    "otherEvents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/otherEvent"
+      }
+    }
+  },
+  "$defs": {
+    "elements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "person",
+        "activity",
+        "object",
+        "emotion"
+      ],
+      "properties": {
+        "place": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "person": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "activity": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "object": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        },
+        "emotion": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    "selectedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventText",
+        "elements",
+        "importance"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "eventText": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "elements": {
+          "$ref": "#/$defs/elements"
+        },
+        "importance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rating",
+            "scale"
+          ],
+          "properties": {
+            "rating": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "scale": {
+              "const": "1-5"
+            }
+          }
+        }
+      }
+    },
+    "otherEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventText",
+        "elements"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "eventText": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "elements": {
+          "$ref": "#/$defs/elements"
+        }
+      }
+    }
+  },
+  "$comment": "Application validation additionally rejects duplicate eventId values across selectedEvent and otherEvents. Enable date format validation in consumers."
+}

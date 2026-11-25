@@ -8,9 +8,9 @@ const flowId=prefix=>`${prefix}-${globalThis.crypto?.randomUUID?.()||`${Date.now
 const flowText=(value,max=200)=>typeof value==='string'?value.trim().slice(0,max):'';
 const flowClone=value=>JSON.parse(JSON.stringify(value));
 const flowSubject=name=>{const last=name.codePointAt(name.length-1);return name+(last>=44032&&last<=55203?(last-44032)%28?'은':'는':'은(는)');};
-const flowPlaceTypes={공원:'park',집:'home',식당:'restaurant',레스토랑:'restaurant',카페:'restaurant',병원:'hospital',치과:'hospital',의원:'hospital',시장:'market',마트:'market',거리:'street',은행:'other',복지관:'other',도서관:'other'};
+const flowPlaceTypes={공원:'park',집:'home',식당:'restaurant',레스토랑:'restaurant',카페:'restaurant',병원:'hospital',치과:'hospital',의원:'hospital',시장:'market',마트:'market',거리:'street',은행:'other',복지관:'other',도서관:'other',수영장:'other',스포츠센터:'other',체육관:'other'};
 const flowKinPattern=/손녀|손자|며느리|사위|남편|아내|친구|딸|아들|의사\s*선생님/g;
-const flowPlacePattern=/(?:[가-힣A-Za-z0-9·-]{0,14})?(?:공원|병원|치과|의원|시장|마트|식당|레스토랑|카페|은행|복지관|도서관|집)(?=에서|에(?:는|서|도|\s)|을|를|이요|이에요|$)/g;
+const flowPlacePattern=/(?:[가-힣A-Za-z0-9·-]{0,14})?(?:공원|병원|치과|의원|시장|마트|식당|레스토랑|카페|은행|복지관|도서관|수영장|스포츠센터|체육관|집)(?=에서|에(?:는|서|도|\s)|을|를|이요|이에요|$)/g;
 function flowPlace(text){const name=[...text.matchAll(flowPlacePattern)][0]?.[0]||'';return {id:'',name,type:Object.entries(flowPlaceTypes).find(([suffix])=>name.endsWith(suffix))?.[1]||'unknown'};}
 function flowTime(text){return /오전|아침/.test(text)?'morning':/오후|점심|낮/.test(text)?'afternoon':/저녁/.test(text)?'evening':/밤/.test(text)?'night':'unknown';}
 function flowEmotion(text){const labels=[];for(const [key,pattern] of [['happy',/좋았|좋아|즐거|기뻤|기쁘|행복|뿌듯|고마|감사|재밌/],['calm',/편안|평온|차분/],['sad',/슬펐|슬프|우울|속상/],['worried',/걱정|불안|무거웠/],['angry',/화났|화가|짜증/],['tired',/피곤|힘들/]])if(pattern.test(text))labels.push(key);return labels;}
@@ -21,7 +21,7 @@ function flowRefusal(answer){
  return null;
 }
 function flowActivity(text){
- for(const [pattern,name] of [[/자전거/,'자전거 타기'],[/산책/,'산책하기'],[/진료|검진|진찰/,'진료받기'],[/장(?:을|을\s*)?\s*봤|장보기/,'장보기'],[/밥|식사|먹었/,'식사하기']])if(pattern.test(text))return name;
+ for(const [pattern,name] of [[/수영|물에\s*뜨|물에\s*떠/,'수영'],[/자전거/,'자전거 타기'],[/산책/,'산책하기'],[/진료|검진|진찰/,'진료받기'],[/장(?:을|을\s*)?\s*봤|장보기/,'장보기'],[/밥|식사|먹었/,'식사하기']])if(pattern.test(text))return name;
  return '';
 }
 
@@ -70,7 +70,7 @@ function flowPersonActions(text,people){
  for(const [index,subject] of subjects.entries()){
   const name=subject[2]||'나';if(!people.some(person=>person.name===name))continue;
   const action=text.slice(subject.index+subject[0].length,subjects[index+1]?.index??text.length).split(/[.!?。\n]/)[0].trim();
-  if(!/탔|타고|타는|탄\s|타면서|걸었|걷|산책|앉|응원|손뼉|박수|먹었|먹고|마셨|마시|진료|검진|읽었|읽고|뛰|달렸|놀았|놀고|이야기했|대화했|요리|만들었|장보기/.test(action))continue;
+  if(!/수영|연습|배웠|배우|손을?\s*잡|탔|타고|타는|탄\s|타면서|걸었|걷|산책|앉|응원|손뼉|박수|먹었|먹고|마셨|마시|진료|검진|읽었|읽고|뛰|달렸|놀았|놀고|이야기했|대화했|요리|만들었|장보기/.test(action))continue;
   if(/않|못했|안\s*(?:탔|타|먹|갔|했)/.test(action))continue;
   result.set(name,flowText(action,200));
  }
@@ -94,7 +94,7 @@ export function supplementExperience(value,answer,{question=''}={}){
  const actions=flowPersonActions(text,r.people);
  for(const person of r.people)if(fillable(`action:${person.id}`)&&actions.has(person.name)){person.action=actions.get(person.name);s[`action:${person.id}`]='provided';}
  if(r.people.length===1&&activity&&fillable('action:person-self')){r.people[0].action=activity;s['action:person-self']='provided';}
- const objects=[...new Set(text.match(/자전거|벤치|안전모|헬멧|케이크|꽃|책|커피|국수|사과|빵/g)||[])];
+ const objects=[...new Set(text.match(/자전거|벤치|안전모|헬멧|케이크|꽃|(?<![가-힣])(?:그림책|동화책|소설책|책)(?=[을를이가은는에도과와]|하고|이랑|[\s,.!?。]|$)|커피|국수|사과|빵/g)||[])];
  if(!['none','unknown','declined'].includes(s.objects)&&objects.length){
   for(const name of objects)if(!r.objects.some(object=>object.name===name)&&r.objects.length<6)r.objects.push({id:`object-${r.objects.length+1}`,name,count:null});
   s.objects='provided';
@@ -212,7 +212,7 @@ export function applyCollectionAnswer(value,field,answer){
    }
   }
   if(field==='objects')r.objects=text.split(/[,、]|그리고|이랑|하고|(?:와|과)\s/).map((name,index)=>({id:`object-${index+1}`,name:flowText(name,80),count:null})).filter(o=>o.name).slice(0,6);
-  if(field.startsWith('action:')){const person=r.people.find(p=>p.id===field.slice(7));if(!person)throw new Error('이 장면의 인물이 아니에요.');person.action=flowText(text,200);}
+  if(field.startsWith('action:')){const person=r.people.find(p=>p.id===field.slice(7));if(!person)throw new Error('이 장면의 인물이 아니에요.');person.action=flowText(flowPersonActions(text,r.people).get(person.name)||text,200);}
  }
  r.confirmed=false;
  return supplementExperience(r,text);

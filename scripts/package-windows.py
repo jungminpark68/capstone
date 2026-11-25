@@ -14,7 +14,7 @@ output.parent.mkdir(parents=True, exist_ok=True)
 files = ['package.json', '.gitignore', '.env.example', 'start-windows.cmd', 'README.md', 'CHANGELOG.md',
          'demo.html', 'verification-demo.html']
 files.extend(path.name for path in root.glob('*.js'))
-for folder in ['public', 'scripts', 'test']:
+for folder in ['public', 'scripts', 'test', 'contracts']:
     files.extend(str(p.relative_to(root)) for p in (root / folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts)
 for folder in ['ml', 'docs']:
     files.extend(str(p.relative_to(root)) for p in (root / folder).rglob('*')

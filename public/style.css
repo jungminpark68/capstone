@@ -140,3 +140,6 @@
 .kaggle-import{display:block;cursor:pointer;border:1px solid #8d9e8b;border-radius:14px;padding:12px 18px;font-size:.84rem;margin:0;text-align:center}
 .kaggle-import input{font-size:.7rem;padding:8px;max-width:100%;margin-top:8px}
 @media(max-width:680px){.diary-verification-panel,.diary-check{padding:20px 17px}.diary-verification-panel .actions{align-items:stretch}.diary-verification-panel select{width:100%}}
+
+/* Optional integration tools stay collapsed during everyday use. */
+.events-export{margin:24px 0}.events-export-json{white-space:pre-wrap;overflow-wrap:anywhere;max-height:460px;overflow:auto;background:#f4f5ef;padding:16px;border-radius:12px;font:14px/1.6 monospace;text-align:left}.settings-panel .scene-confirm{align-items:flex-start}

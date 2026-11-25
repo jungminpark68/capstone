@@ -1,0 +1,51 @@
+{
+  "schema": "memory-itda-diary-events-v1",
+  "diaryId": "today-001",
+  "experienceDate": "2026-11-25",
+  "selectedEvent": {
+    "eventId": "today-001-event-01",
+    "eventText": "아들과 수영장에서 물에 뜨는 연습을 했다. 아들이 손을 잡아줘서 함께 웃었다.",
+    "elements": {
+      "place": [
+        "수영장"
+      ],
+      "person": [
+        "나",
+        "아들"
+      ],
+      "activity": [
+        "수영",
+        "나: 물에 뜨는 연습",
+        "아들: 손을 잡아 줌"
+      ],
+      "object": [],
+      "emotion": [
+        "함께 웃어서 즐거웠다."
+      ]
+    },
+    "importance": {
+      "rating": 5,
+      "scale": "1-5"
+    }
+  },
+  "otherEvents": [
+    {
+      "eventId": "today-001-event-02",
+      "eventText": "오전에 딸과 공원에서 산책했다.",
+      "elements": {
+        "place": [
+          "공원"
+        ],
+        "person": [
+          "나",
+          "딸"
+        ],
+        "activity": [
+          "산책"
+        ],
+        "object": [],
+        "emotion": []
+      }
+    }
+  ]
+}
