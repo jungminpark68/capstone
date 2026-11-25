@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 MODULES = ["__init__", "common", "prepare", "losses", "shared_encoder", "synthetic",
-           "free_diary_data", "model", "train", "predict", "evaluate", "vlm_benchmark"]
+           "free_diary_data", "draft_labels", "model", "train", "predict", "evaluate", "vlm_benchmark"]
 
 
 def md(text):
@@ -61,10 +61,13 @@ Kaggle 무료 GPU 할당 범위에서 공개 SDXL 가중치를 직접 실행합�
 3. 그림과 원래 사건을 대조해 사실마다 사람이 정답을 붙입니다.
 4. 검토 완료 자료를 사건 단위로 나누어 ② 판정기 노트북에 연결합니다.
 
-생성 요청에 넣은 정상·오류 종류는 정답이 아닙니다. 생성 모델이 지시를 따르지 않을 수 있어 **모든 정답 칸은 비워 둡니다.**"""),
+생성 요청에 넣은 정상·오류 종류는 정답이 아닙니다. 생성 모델이 지시를 따르지 않을 수 있어 **초벌 라벨은 무료 VLM으로 제안하고, 검토 완료를 누른 답만 사람 정답으로 저장합니다. 평가용 그림은 초벌 답을 생성하지 않습니다.**"""),
         setup("/kaggle/working/free-diary-data"),
         code('''SOURCE_NAME="pencil-sdxl-v1"
 TOTAL_IMAGES=20       # 화풍 확인 후 100, 300, 1000 등으로 증가. 같은 SOURCE_NAME에서 이어 만듭니다.
+RUN_DRAFT_LABELS=True # 생성 뒤 무료 VLM으로 학습/검증용 초벌 라벨을 만듭니다.
+DRAFT_MODEL="Qwen/Qwen3-VL-4B-Instruct"
+DRAFT_FOUR_BIT=True
 RUN_GENERATION=True   # 정답 검토만 할 때 False로 바꾸고 Kaggle GPU도 꺼도 됩니다.
 DATA_SEED=42
 STEPS=25
@@ -82,10 +85,10 @@ BUILD_REVIEWED=False  # 사람이 정답 검토를 마친 뒤 True로 바꾸고 
 '''),
         bundled(),
         code('''subprocess.run([sys.executable,"-m","pip","install","torch>=2.6,<3","torchvision>=0.21,<1",
-    "transformers==5.23.0","diffusers==0.43.0","accelerate>=1.2,<2","Pillow>=10.4,<13","ipywidgets>=8,<9"],check=True)
+    "transformers==5.23.0","diffusers==0.43.0","accelerate>=1.2,<2","Pillow>=10.4,<13","ipywidgets>=8,<9","peft==0.21.3","bitsandbytes>=0.45,<1"],check=True)
 import torch
 print("GPU:",torch.cuda.get_device_name(0) if torch.cuda.is_available() else "없음")
-if RUN_GENERATION:assert torch.cuda.is_available(),"Kaggle에서 GPU를 켜세요."
+if RUN_GENERATION or RUN_DRAFT_LABELS:assert torch.cuda.is_available(),"Kaggle에서 GPU를 켜세요."
 '''),
         md("""## 생성 · 중단 뒤 이어 만들기
 
@@ -107,9 +110,21 @@ for row in generated[:4]:
         preview=image.copy();preview.thumbnail((512,512));display(preview)
 print("생성 장수:",len(generated),"· 정답은 아직 사람 검토가 필요합니다.")
 '''),
+        md("""## 무료 VLM 초벌 라벨
+
+생성 프로세스가 끝나 GPU 메모리를 반환한 뒤 판정 모델을 실행합니다. 학습/검증용 그림만 초벌 라벨을 만들고, 최종 평가용 그림은 생성·표시에서 제외합니다. 사건별 분할은 여기서 고정하며 장수를 늘려도 기존 사건이 다른 분할로 이동하지 않습니다. 초벌 라벨은 사람 정답과 별도 파일에 저장되고 이미 계산한 항목은 이어서 재사용합니다.
+
+검토만 할 때는 RUN_GENERATION=False와 RUN_DRAFT_LABELS=False로 바꾼 뒤 GPU를 꺼도 됩니다."""),
+        code('''if RUN_DRAFT_LABELS:
+    draft_args=["diary_verifier.draft_labels","--source",SOURCE,"--model",DRAFT_MODEL]
+    if DRAFT_FOUR_BIT:draft_args.append("--four-bit")
+    run(*draft_args)
+else:
+    print("초벌 생성 생략 · 저장한 초벌 답을 재사용합니다.")
+'''),
         md("""## 사람이 정답 붙이기
 
-아래 화면은 생성 의도나 모델 예측을 보여주지 않습니다. 그림과 원래 사건만 보고 일치·불일치·판단 불가를 선택하세요. 검토자 ID와 정답은 human-review.csv에 저장됩니다. CSV를 직접 편집해도 됩니다.
+학습/검증용은 초벌 라벨이 미리 선택돼 있습니다. 그림과 원래 사건을 보고 틀린 항목만 수정하고 검토 완료를 누르세요. 최종 평가용은 초벌 답을 숨기고 직접 판정합니다. 검토하지 않은 초벌 라벨은 학습에 포함하지 않습니다. 검토자 ID와 정답은 human-review.csv에 저장됩니다. CSV를 직접 편집해도 됩니다.
 
 가려져 확인할 수 없으면 판단 불가, 명확하게 다른 행동이나 필수 대상 누락이면 불일치입니다. '정상으로 생성 요청했다'는 이유로 일치라고 선택하지 않습니다. 정식 시험 자료는 다른 팀원이 독립 검토한 뒤 이견을 조정하는 것이 좋습니다."""),
         code('''from diary_verifier.free_diary_data import review_widget
@@ -282,7 +297,7 @@ def build(cells, kind):
     return {"cells": cells,
             "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
                          "language_info": {"name": "python", "version": "3.12"},
-                         "memory_connect": {"version": "0.16.0", "self_contained": True,
+                         "memory_connect": {"version": "0.17.0", "self_contained": True,
                                             "contains_predictions": False, "kind": kind}},
             "nbformat": 4, "nbformat_minor": 5}
 

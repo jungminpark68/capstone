@@ -184,7 +184,7 @@ def review_template(root):
                 if key in existing:
                     raise ValueError("Duplicate review row")
                 existing[key] = row
-    fields = ["image_id", "fact_id", "image", "fact_text", "label", "reviewer", "notes"]
+    fields = ["image_id", "fact_id", "image", "fact_text", "label", "reviewer", "notes", "draft_label", "review_mode"]
     values = []
     for image in read_jsonl(root / "generated-manifest.jsonl"):
         for fact in image["facts"]:
@@ -193,7 +193,8 @@ def review_template(root):
                 raise ValueError("Review CSV no longer matches the generated facts")
             values.append(dict(zip(fields, [image["id"], fact["id"], image["image"],
                                            fact["text"], value.get("label", ""),
-                                           value.get("reviewer", ""), value.get("notes", "")])))
+                                           value.get("reviewer", ""), value.get("notes", ""),value.get('draft_label',''),
+                                           value.get('review_mode','manual' if value.get('label') else '')])))
     temp = target.with_suffix(".tmp")
     with temp.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -232,7 +233,7 @@ def prepare_reviewed(root, out, seed=42):
                 continue
             if row["label"] not in LABELS or not row["reviewer"].strip():
                 raise ValueError("A valid human label and reviewer ID are required")
-            facts.append({**fact, "label": row["label"]})
+            facts.append({**fact, "label": row["label"], 'draft_label':row.get('draft_label',''), 'review_mode':row.get('review_mode','manual')})
         if len(facts) != len(image["facts"]):
             continue
         if file_sha(root / image["image"]) != image["image_sha256"]:
@@ -242,9 +243,25 @@ def prepare_reviewed(root, out, seed=42):
     validate_examples(reviewed)
     if len({row["event_id"] for row in reviewed}) < 6:
         raise ValueError("Review at least 6 independent events before making train/dev/test")
-    parts = split_groups(reviewed, seed)
+    registry_path=root/'review-splits.json'
+    if registry_path.exists():
+        from .draft_labels import ensure_registry
+        registry=ensure_registry(root)
+        parts={name:[] for name in ('train','dev','test')}
+        for image in reviewed:
+            split=registry['events'][image['event_id']]
+            if split=='test' and any(lookup[(image['id'],f['id'])].get('review_mode') not in ('blind','manual') for f in image['facts']):
+                raise ValueError('Test labels must be blind human reviews')
+            parts[split].append(image)
+        if any(not rows for rows in parts.values()):raise ValueError('Review more events to fill the fixed train/dev/test splits')
+        for first,rows in parts.items():
+            for second,values in parts.items():
+                if first!=second and {r['image_sha256'] for r in rows}&{r['image_sha256'] for r in values}:raise ValueError('Same image leaked across fixed splits')
+    else:
+        parts = split_groups(reviewed, seed)
     out.mkdir(parents=True)
     (out / "images").mkdir()
+    if registry_path.exists():shutil.copyfile(registry_path,out/'review-splits.json')
     for row in reviewed:
         shutil.copyfile(root / row["image"], out / row["image"])
     for name, rows in parts.items():
@@ -266,6 +283,28 @@ def prepare_reviewed(root, out, seed=42):
 
 
 
+
+def save_review(root,image_id,labels,reviewer):
+    from . import LABELS
+    from .draft_labels import ensure_registry,suggestions
+    root=Path(root)
+    registry=ensure_registry(root)
+    image=next(r for r in read_jsonl(root/'generated-manifest.jsonl') if r['id']==image_id)
+    if not reviewer.strip() or set(labels)!={f['id'] for f in image['facts']} or any(v not in LABELS for v in labels.values()):
+        raise ValueError('Reviewer and complete explicit labels are required')
+    blind=registry['events'][image['event_id']]=='test'
+    drafts={} if blind else suggestions(root,registry)
+    review_template(root)
+    with (root/'human-review.csv').open(encoding='utf-8-sig',newline='') as stream:values=list(csv.DictReader(stream))
+    for row in values:
+        if row['image_id']==image_id:
+            draft=drafts.get((image_id,row['fact_id']),{}).get('label','')
+            row.update(label=labels[row['fact_id']],reviewer=reviewer.strip(),draft_label=draft,
+                       review_mode='blind' if blind else 'assisted' if draft else 'manual')
+    temporary=root/'human-review.tmp'
+    with temporary.open('w',encoding='utf-8-sig',newline='') as stream:
+        writer=csv.DictWriter(stream,fieldnames=list(values[0]));writer.writeheader();writer.writerows(values)
+    temporary.replace(root/'human-review.csv')
 def review_widget(root, start=0, reviewer=""):
     """Show only source facts and pixels; requested error types are hidden to reduce priming."""
     import ipywidgets as widgets
@@ -275,6 +314,9 @@ def review_widget(root, start=0, reviewer=""):
     if not rows:
         raise ValueError("Generate images first")
     review_template(root)
+    from .draft_labels import ensure_registry,suggestions
+    registry=ensure_registry(root)
+    drafts=suggestions(root,registry)
     position = [min(max(0, start), len(rows) - 1)]
     panel, status = widgets.Output(), widgets.Output()
     reviewer_box = widgets.Text(value=reviewer, description="검토자 ID")
@@ -290,12 +332,14 @@ def review_widget(root, start=0, reviewer=""):
     def show():
         import html
         row = rows[position[0]]
+        blind=registry['events'][row['event_id']]=='test'
         lookup = {(r["image_id"], r["fact_id"]): r for r in read_reviews()}
         dropdowns.clear()
         with panel:
             clear_output(wait=True)
             display(HTML(f"<b>{position[0]+1} / {len(rows)}</b><p>{html.escape(row['scene'])}</p>"
                          f"<p>{html.escape(row['characters']).replace(chr(10), '<br>')}</p>"))
+            print('최종 평가용 · 초벌 답을 숨긴 직접 판정' if blind else '학습/검증용 · 초벌 답을 확인하고 틀린 항목만 수정하세요.')
             from PIL import Image
             with Image.open(root / row["image"]) as image:
                 thumbnail = image.copy()
@@ -305,7 +349,7 @@ def review_widget(root, start=0, reviewer=""):
                 choice = widgets.Dropdown(
                     options=[("미판정", ""), ("일치", "supported"), ("불일치", "contradicted"),
                              ("판단 불가", "uncertain")],
-                    value=lookup[(row["id"], fact["id"])]["label"],
+                    value=lookup[(row["id"], fact["id"])]["label"] or ('' if blind else drafts.get((row['id'],fact['id']),{}).get('label','')),
                     description=fact["id"], layout=widgets.Layout(width="100%"))
                 dropdowns.append(choice)
                 display(widgets.HTML(value=html.escape(fact["text"])), choice)
@@ -320,19 +364,9 @@ def review_widget(root, start=0, reviewer=""):
             if not reviewer_box.value.strip() or any(not choice.value for choice in dropdowns):
                 print("검토자 ID와 모든 사실의 판정을 입력하세요. 가려져 확인할 수 없으면 판단 불가입니다.")
                 return
-            values = read_reviews()
             row = rows[position[0]]
             selected = {fact["id"]: choice.value for fact, choice in zip(row["facts"], dropdowns)}
-            for entry in values:
-                if entry["image_id"] == row["id"]:
-                    entry["label"] = selected[entry["fact_id"]]
-                    entry["reviewer"] = reviewer_box.value.strip()
-            temp = root / "human-review.tmp"
-            with temp.open("w", encoding="utf-8-sig", newline="") as stream:
-                writer = csv.DictWriter(stream, fieldnames=list(values[0]))
-                writer.writeheader()
-                writer.writerows(values)
-            temp.replace(root / "human-review.csv")
+            save_review(root,row['id'],selected,reviewer_box.value)
             print("사람 정답 저장:", row["id"])
         move(1)
 
