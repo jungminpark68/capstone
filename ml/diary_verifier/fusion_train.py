@@ -12,22 +12,28 @@ from .shared_encoder import FactFusionHead
 from .losses import paired_batches,verification_loss,claim_key
 
 
-def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,pair_weight=.25,hidden=256,heads=4,text_mode='sentence',seed=42,device=None,patience=4,fusion_method='cross_attention'):
+def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,pair_weight=.25,hidden=256,heads=4,text_mode='sentence',seed=42,device=None,patience=4,fusion_method='cross_attention',allow_synthetic=False,balanced=False):
     data,out=Path(data),Path(out)
     if (out/'fusion_config.json').exists():raise ValueError('Choose a new run directory; existing learned weights are not overwritten')
     if epochs<1 or batch_size<1 or pair_weight<0 or learning_rate<=0 or hidden<1 or heads<1 or hidden%heads or patience<1:raise ValueError('Invalid training settings')
     if pair_weight>0 and batch_size<2:raise ValueError('Same-claim contrastive training needs batch size >= 2')
-    purpose=json.loads((data/'dataset-info.json').read_text()).get('data_purpose')
-    if purpose not in ('collected_human_reviewed_data','software_test_fixture'):raise ValueError('Prepare/version the reviewed dataset first; do not label unknown data as real training data')
+    dataset_info=json.loads((data/'dataset-info.json').read_text());purpose=dataset_info.get('data_purpose')
+    if purpose=='synthetic_controlled':
+        if not allow_synthetic or dataset_info.get('annotation_source')!='renderer_scene_graph_v1':raise ValueError('Controlled synthetic data requires the explicit synthetic experiment mode and renderer labels')
+    elif purpose not in ('collected_human_reviewed_data','software_test_fixture'):raise ValueError('Prepare/version the reviewed dataset first; do not label unknown data as real training data')
     train,dev=read_jsonl(data/'train.jsonl'),read_jsonl(data/'dev.jsonl')
     if not train or not dev or {row['group_id'] for row in train}&{row['group_id'] for row in dev}:raise ValueError('Nonempty, independent train/dev event groups are required')
     if {row['image_sha256'] for row in train}&{row['image_sha256'] for row in dev}:raise ValueError('The same image leaked across train/dev')
     items,dev_items=flat_examples(train),flat_examples(dev)
-    if set(fact['label'] for _,fact in items)!=set(LABELS):raise ValueError('Training requires all three human-labelled classes, including genuinely ambiguous examples')
+    if set(fact['label'] for _,fact in items)!=set(LABELS):raise ValueError('Training requires all three labelled classes, including genuinely ambiguous examples')
     cache=FeatureCache(cache_path)
     for name in ('train','dev'):cache.assert_manifest(data/(name+'.jsonl'))
     rng=random.Random(seed);torch.manual_seed(seed)
     device=device or ('cuda' if torch.cuda.is_available() else 'cpu')
+    weights=None
+    if balanced:
+        counts=torch.bincount(torch.tensor([LABELS.index(fact['label']) for _,fact in items]),minlength=3).float()
+        weights=(len(items)/(3*counts)).to(device)
     head=FactFusionHead(cache.text_spec,cache.image_spec.patch_dim,hidden,heads,text_mode=text_mode,fusion_method=fusion_method).to(device)
     optimizer=torch.optim.AdamW(head.parameters(),lr=learning_rate,weight_decay=.01)
     best,stale,history=float('inf'),0,[]
@@ -41,7 +47,7 @@ def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,p
             logits=head(*features)
             targets=torch.tensor([LABELS.index(fact['label']) for _,fact in selected],device=device)
             keys=[claim_key(example,fact) for example,fact in selected]
-            loss,detail=verification_loss(logits,targets,keys,pair_weight)
+            loss,detail=verification_loss(logits,targets,keys,pair_weight,class_weights=weights)
             if not torch.isfinite(loss):raise RuntimeError('Nonfinite training loss')
             optimizer.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(head.parameters(),1.);optimizer.step()
             loss_total+=float(loss.detach());pairs+=detail['pairs']
@@ -61,6 +67,7 @@ def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,p
             temp=out/'fusion_head.tmp';torch.save({name:value.detach().cpu() for name,value in head.state_dict().items()},temp);temp.replace(out/'fusion_head.pt')
             config={'architecture':'shared_encoder_fact_fusion','weights_learned':True,'data_purpose':purpose,'labels':list(LABELS),'encoders':cache.bundle,
                     'hidden':hidden,'heads':heads,'text_mode':text_mode,'fusion_method':fusion_method,'training_scope':'fusion_head_only_frozen_encoders','encoders_finetuned':False,'seed':seed,'pair_weight':pair_weight,
+                    'class_weights':weights.detach().cpu().tolist() if weights is not None else None,'annotation_source':dataset_info.get('annotation_source','human_or_software_fixture'),
                     'train_manifest_sha256':file_sha(data/'train.jsonl'),'dev_manifest_sha256':file_sha(data/'dev.jsonl'),'best_dev_loss':best,'weights_sha256':file_sha(out/'fusion_head.pt'),
                     'trainable_parameters':sum(parameter.numel() for parameter in head.parameters()),'test_used_for_selection':False}
             (out/'fusion_config.json').write_text(json.dumps(config,ensure_ascii=False,indent=2))
@@ -83,8 +90,10 @@ def main():
     parser.add_argument('--fusion-method',choices=['cross_attention','pooled'],default='cross_attention')
     parser.add_argument('--seed',type=int,default=42)
     parser.add_argument('--device')
+    parser.add_argument('--synthetic',action='store_true')
+    parser.add_argument('--balanced',action='store_true')
     args=parser.parse_args()
-    result=train_fusion(args.data,args.cache,args.out,epochs=args.epochs,batch_size=args.batch_size,learning_rate=args.lr,pair_weight=args.pair_weight,hidden=args.hidden,heads=args.heads,text_mode=args.text_mode,seed=args.seed,device=args.device,fusion_method=args.fusion_method)
+    result=train_fusion(args.data,args.cache,args.out,epochs=args.epochs,batch_size=args.batch_size,learning_rate=args.lr,pair_weight=args.pair_weight,hidden=args.hidden,heads=args.heads,text_mode=args.text_mode,seed=args.seed,device=args.device,fusion_method=args.fusion_method,allow_synthetic=args.synthetic,balanced=args.balanced)
     print(json.dumps({'checkpoint':args.out,'training_scope':result['training_scope'],'data_purpose':result['data_purpose'],'trainable_parameters':result['trainable_parameters']}))
 
 

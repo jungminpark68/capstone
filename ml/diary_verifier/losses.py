@@ -9,8 +9,8 @@ def claim_key(example,fact):
     return (example['group_id'],context_text(example,fact))
 
 
-def verification_loss(logits, targets, pair_keys, pair_weight=.25, margin=1.0):
-    classification = F.cross_entropy(logits, targets)
+def verification_loss(logits, targets, pair_keys, pair_weight=.25, margin=1.0,class_weights=None):
+    classification = F.cross_entropy(logits, targets,weight=class_weights)
     scores = logits[:, 0] - logits[:, 1]
     pairs = []
     for i in range(len(pair_keys)):

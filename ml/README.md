@@ -1,5 +1,7 @@
 # 기억잇다 · 한국어 문장–이미지 판정기
 
+자료가 없으면 **`notebooks/memory_connect_synthetic_kaggle.ipynb`**를 사용합니다. 소스·도식형 그림 생성·규칙 정답·학습·성능 비교를 한 노트북에 포함합니다. 별도 파일 업로드와 API 키가 필요 없습니다. [합성 실험 안내](../docs/kaggle-synthetic-guide.md). 합성 학습 가중치는 실제 사람 검토 모델로 표시하거나 앱의 기본 판정 서버에 연결하지 않습니다.
+
 v0.14에서는 **`notebooks/memory_connect_verifier_kaggle.ipynb`**를 사용합니다. 학습·평가, 기존 가중치 평가, 앱의 그림 일괄 판정 세 가지 방식이 있습니다. 독립 코드 ZIP의 README와 [통합 사용 안내](../docs/kaggle-verifier-guide.md)를 참고하세요. `diary_verifier.experiment`는 pooled/plain/relation을 비교하고 HTML·CSV·JSON 성능표와 시드별 요약을 저장합니다. 앱과는 HTTP 서버 또는 그림·사실 지문이 연결된 JSON 파일로 연동합니다.
 
 주 경로는 **BGE-M3 한국어 문장 특징 + SigLIP2 그림 패치 특징 + 직접 학습하는 연결·분류 모듈**이다. 일치(`supported`)·불일치(`contradicted`)·판단 불가(`uncertain`)로 분류한다. 두 인코더는 고정하고 판정 모듈만 학습한다. 인코더 파인튜닝을 완료했다는 의미는 아니다.

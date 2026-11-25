@@ -9,15 +9,16 @@ from .fusion_features import ImageEncoderSpec,SiglipPatchEncoder,encoder_bundle,
 
 
 class FusionCheckpoint:
-    def __init__(self,path,device='cpu',allow_software_fixture=False):
+    def __init__(self,path,device='cpu',allow_software_fixture=False,allow_synthetic=False):
         self.path=Path(path)
         self.config=json.loads((self.path/'fusion_config.json').read_text())
         c=self.config
         if c.get('architecture')!='shared_encoder_fact_fusion' or c.get('labels')!=list(LABELS) or not c.get('weights_learned'):
             raise ValueError('Not a learned fusion checkpoint')
         self.trained=c.get('data_purpose')=='collected_human_reviewed_data'
-        if not self.trained and not allow_software_fixture:
-            raise ValueError('Software-test or untrained weights cannot be served as a real verifier')
+        self.synthetic=c.get('data_purpose')=='synthetic_controlled'
+        if not self.trained and not (allow_software_fixture and c.get('data_purpose')=='software_test_fixture') and not (allow_synthetic and self.synthetic):
+            raise ValueError('Experimental synthetic/software weights require explicit opt-in and cannot be served as a human-reviewed diary verifier')
         if file_sha(self.path/'fusion_head.pt')!=c['weights_sha256']:raise ValueError('Checkpoint weights changed or are incomplete')
         self.text_spec=EncoderSpec(**c['encoders']['text'])
         self.image_spec=ImageEncoderSpec(**c['encoders']['image'])
@@ -39,10 +40,11 @@ class FusionVerifier:
     backend_mode='local_fusion'
     training_scope='fusion_head_only_frozen_encoders'
 
-    def __init__(self,checkpoint,device=None,model_cache=None,text_encoder=None,image_encoder=None):
+    def __init__(self,checkpoint,device=None,model_cache=None,text_encoder=None,image_encoder=None,allow_synthetic=False):
         device=device or ('cuda' if torch.cuda.is_available() else 'cpu')
-        self.checkpoint=FusionCheckpoint(checkpoint,device)
+        self.checkpoint=FusionCheckpoint(checkpoint,device,allow_synthetic=allow_synthetic)
         self.trained=self.checkpoint.trained
+        if self.checkpoint.synthetic:self.backend_mode='synthetic_controlled_fusion'
         self.adapter=self.checkpoint.model_id
         self.base_model='BGE/SigLIP-compatible encoder fusion'
         text,image=self.checkpoint.text_spec,self.checkpoint.image_spec
