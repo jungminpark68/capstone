@@ -4,6 +4,10 @@
 
 [버전별 수정 내역 보기](CHANGELOG.md)
 
+## 무료 색연필풍 자료와 순정·LoRA 비교 · v0.16.0
+
+두 개의 소스 포함 Kaggle 노트북으로 SDXL 색연필풍 자료 생성·사람 검토와, 같은 공개 VLM의 순정/일반 LoRA/오류 대조 LoRA 비교를 실행합니다. 이미지당 API 요금 없이 GPU 할당 범위에서 생성하고 장수를 늘려 이어 만들 수 있습니다. 개발셋으로 모델을 선택하고 봉인한 뒤 최종 시험을 별도로 실행합니다. [실행·학습 설정 안내](docs/kaggle-pretrained-lora-guide.md)
+
 ## 자료 없는 Kaggle 합성 실험 · v0.15.0
 
 `memory-synthetic-v0.15.zip`의 `memory_connect_synthetic_kaggle.ipynb` 하나를 Kaggle에 불러와 GPU·Internet을 켜고 실행합니다. 데이터셋 업로드와 API 키 없이 그림 330장·사실 2640개를 기본 생성하고 실제 사전학습 특징으로 판정 모듈을 학습·비교합니다. 11종 사례의 정답·예측과 HTML/CSV 성능표를 확인할 수 있습니다. 합성 도식 성능은 실제 그림일기 성능과 구분합니다. [실행 안내](docs/kaggle-synthetic-guide.md)

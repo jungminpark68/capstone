@@ -6,27 +6,38 @@ from .common import SYSTEM, context_text, file_sha
 
 
 class LocalVerifier:
-    def __init__(self, base_model=BASE_MODEL, adapter=None, device=None, four_bit=False, max_pixels=200704, training=False):
+    def __init__(self, base_model=BASE_MODEL, adapter=None, device=None, four_bit=False, max_pixels=200704, training=False,
+                 revision=None, lora_rank=16, lora_alpha=32, lora_dropout=.05, allow_synthetic=False):
         if not base_model:raise ValueError('사전학습모델이 아직 지정되지 않았습니다. 후보 검토 후 체크포인트를 명시하세요.')
         import torch
         from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
         self.torch = torch
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.base_model, self.adapter = base_model, adapter
+        self.adapter_config = {}
         if four_bit and self.device != "cuda":
             raise ValueError("4-bit loading requires a supported CUDA GPU")
         self.dtype = torch.bfloat16 if self.device == "cuda" and torch.cuda.is_bf16_supported() else torch.float16 if self.device == "cuda" else torch.float32
         if adapter:
             config = json.loads((Path(adapter) / "verifier_config.json").read_text())
+            self.adapter_config = config
             if config["base_model"] != base_model or config["labels"] != list(LABELS):
                 raise ValueError("Adapter base model/label protocol does not match")
-        self.processor = AutoProcessor.from_pretrained(adapter or base_model, max_pixels=max_pixels, min_pixels=3136, use_fast=False)
+            if config.get('data_purpose') == 'synthetic_controlled':
+                if not allow_synthetic:raise ValueError('Synthetic experiment weights require explicit opt-in; not an app-ready human-reviewed model')
+                self.backend_mode = 'synthetic_controlled_vlm_finetuned'
+            if revision is not None and config.get('revision') not in (None,revision):raise ValueError('Adapter revision differs from the requested pretrained checkpoint')
+            revision = revision or config.get('revision')
+        self.revision = revision
+        processor_kwargs = {} if adapter or revision is None else {'revision':revision}
+        self.processor = AutoProcessor.from_pretrained(adapter or base_model, max_pixels=max_pixels, min_pixels=3136, use_fast=False, **processor_kwargs)
         self.processor.tokenizer.padding_side = "left"
         ids = [self.processor.tokenizer.encode(token, add_special_tokens=False) for token in LABEL_TOKENS]
         if any(len(token_ids) != 1 for token_ids in ids) or len({token_ids[0] for token_ids in ids}) != 3:
             raise ValueError("The classifier protocol needs three distinct single-token labels A/B/C")
         self.label_ids = [token_ids[0] for token_ids in ids]
         kwargs = {"dtype": self.dtype, "attn_implementation": "sdpa", "trust_remote_code": False}
+        if revision is not None:kwargs['revision']=revision
         if four_bit:
             kwargs.update(quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=self.dtype), device_map={"": 0})
         self.model = AutoModelForImageTextToText.from_pretrained(base_model, **kwargs)
@@ -40,7 +51,7 @@ class LocalVerifier:
             # Adapt language attention, hybrid recurrent projections and MLPs; keep the vision backbone frozen.
             self.lora_targets=[name for name,module in self.model.named_modules() if isinstance(module,torch.nn.Linear) and 'language_model' in name and not name.endswith('lm_head')]
             if not self.lora_targets:raise ValueError('No supported language-model linear projections found; inspect this backbone before training')
-            self.model = get_peft_model(self.model, LoraConfig(r=16, lora_alpha=32, lora_dropout=.05, target_modules=self.lora_targets, task_type="CAUSAL_LM"))
+            self.model = get_peft_model(self.model, LoraConfig(r=lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout, target_modules=self.lora_targets, task_type="CAUSAL_LM"))
             self.model.config.use_cache = False
             self.model.enable_input_require_grads()
             self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -87,4 +98,4 @@ class LocalVerifier:
 
     @property
     def trained(self):
-        return bool(self.adapter)
+        return bool(self.adapter) and self.adapter_config.get('data_purpose') != 'synthetic_controlled'
