@@ -1,6 +1,7 @@
 import {validDate,calendarEvent,planCandidate} from './calendar.js';
 import {validateSceneRecord,matchingMetadata} from './diary-record.js';
 import {experienceMatching} from './experience-flow.js';
+import {savedDiaryCheck} from './diary-verification.js';
 export function localDate(date=new Date()){
  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
 }
@@ -32,6 +33,7 @@ export function makeEntry(state,id){
  if(state.sceneRecord){const importance=state.experienceBundle?.importance;entry.sceneRecord=validateSceneRecord({...state.sceneRecord,diaryNarrative:state.dayNarrative||state.experienceBundle?.diaryNarrative||state.draft.body,...(importance?.eventId===state.sceneRecord.id?{importanceRating:importance.value,importanceStatus:importance.status}:{})});entry.matching=matchingMetadata(entry.sceneRecord);}
  if(state.experienceBundle){entry.experiences=structuredClone(state.experienceBundle);entry.experiences.diaryNarrative=state.dayNarrative||state.experienceBundle.diaryNarrative||state.draft.body;if(entry.sceneRecord)entry.experiences.events=entry.experiences.events.map(event=>event.id===entry.sceneRecord.id?entry.sceneRecord:event);entry.matchingContext=experienceMatching(entry.experiences);}
  if(image&&state.imageGeneration)entry.generation=state.imageGeneration;
+ if(image&&state.imageId){entry.imageId=state.imageId;const check=savedDiaryCheck(state);if(check)entry.verification=check;}
  entry.conversation=conversationTranscript(state);
  return entry;
 }

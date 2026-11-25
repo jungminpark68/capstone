@@ -1,5 +1,6 @@
 import {PLACE_TYPES,TIME_TYPES} from './diary-record.js';
 import {readableDate} from './state.js';
+import {currentDiaryCheck,renderDiaryCheck} from './diary-verification.js';
 
 const diaryList=value=>Array.isArray(value)?value:[];
 const diaryText=value=>typeof value==='string'?value.trim():'';
@@ -101,6 +102,7 @@ export function renderDiaryDetail(container,entry){
   }
  }else metadata.append(diaryNode('p','diary-note','이 일기에는 장소·인물 같은 별도 정보가 저장되지 않았어요. 남겨둔 글과 그림은 그대로 볼 수 있어요.'));
  layout.append(metadata);container.append(layout);
+ const check=currentDiaryCheck(entry);if(check){const panel=diaryNode('section');renderDiaryCheck(panel,check);container.append(panel);}
 
  if(model.conversation.length){
   const dialogue=diaryDisclosure('어떤 대화로 완성했나요?','diary-dialogue',true);

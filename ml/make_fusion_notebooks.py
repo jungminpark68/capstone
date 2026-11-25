@@ -1,183 +1,205 @@
-"""Build the primary small-verifier Kaggle/Colab notebooks without outputs or secrets."""
+"""Generate standalone train/evaluate/batch-inference notebooks without results or keys."""
 import json
 from pathlib import Path
-
 ROOT=Path(__file__).parent
 
 def md(text):return {'cell_type':'markdown','metadata':{},'source':text.splitlines(True)}
 def code(text):return {'cell_type':'code','execution_count':None,'metadata':{},'outputs':[],'source':text.splitlines(True)}
-
 def notebook(platform):
-    kaggle=platform=='kaggle'
-    run='/kaggle/working/memory-connect' if kaggle else '/content/memory-connect'
-    upload='/kaggle/input' if kaggle else '/content'
-    cells=[md(f'''# 기억잇다 · {platform.title()} 한국어 임베딩 판정기
+    run='/kaggle/working/memory-verifier' if platform=='kaggle' else '/content/memory-verifier'
+    input_root='/kaggle/input' if platform=='kaggle' else '/content'
+    cells=[md('''# 기억잇다 · 그림일기 판정기
 
-BGE-M3와 SigLIP2는 **고정**하고, 사실–그림 연결·어텐션·3분류 모듈만 직접 학습합니다.
+**세 가지 실행 방식**: `train_and_evaluate`(학습·성능 비교), `evaluate_only`(기존 가중치 평가), `predict_diaries`(앱에서 내보낸 그림 판정).
 
-- 입력: 확인된 장면·인물 정보·사실 하나와 그림.
-- 출력: 일치 / 불일치 / 판단 불가.
-- 준비물: 코드 ZIP, 앱 `/verification`에서 내보낸 **실제 그림·사람 판정 JSON**.
-- 현재 연구용 학습 가중치와 정확도 결과는 없습니다. 예시 자료로 성능을 만들지 않습니다.
+BGE-M3 한국어 인코더와 SigLIP2 그림 인코더를 동결하고 결합·3분류 모듈만 학습합니다. 실제 연구용 가중치·성능 결과는 동봉하지 않았습니다.
 
-GPU를 켜고 첫 모델 다운로드 시 인터넷을 허용합니다. Kaggle에서는 비공개 데이터셋으로 파일을 연결하세요. Colab에서는 `/content`에 파일을 올리거나 `EXPORT_DIR`를 Drive 경로로 바꿉니다. 캐시 특징 학습은 CPU도 가능하지만 특징 추출에는 GPU가 유리합니다.
+- GPU와 Internet을 켭니다. 코드 ZIP과 실제 사람 검토 JSON을 비공개 Dataset으로 연결합니다.
+- 학습·평가에는 사람이 항목별 정답을 붙인 그림이 필요합니다. 없는 경우 앱에서 자료 수집부터 시작합니다.
+- 단순 평균 결합 / 패치 어텐션 / 어텐션+관계 대조 학습을 같은 데이터·시드로 비교합니다.
+- API 비교는 별도 선택이며 기본은 유료 호출 0회입니다.
+- Kaggle의 localhost는 노트북 안의 주소입니다. 앱과 연결할 때는 결과 JSON을 가져오거나 가중치를 내려받아 로컬 판정 서버를 실행합니다.
 '''),code(f'''from pathlib import Path
-import sys, os, json, subprocess, zipfile
-RUN_ROOT=Path({run!r})
-RUN_ROOT.mkdir(parents=True,exist_ok=True)
-INPUT_ROOT=Path({upload!r})
-PROJECT_ZIP=""  # 자동 탐색에 실패할 때 코드 ZIP 경로 지정
-EXPORT_DIR=INPUT_ROOT  # 실제 그림·사람 판정 JSON을 담은 폴더
-PROJECT=None
-if not PROJECT_ZIP:
-    archives=sorted(INPUT_ROOT.rglob("memory-connect-v0.13.zip"))
-    if archives:
-        PROJECT_ZIP=str(archives[0])
+import os, sys, json, zipfile, subprocess
+RUN_ROOT=Path({run!r}); RUN_ROOT.mkdir(parents=True,exist_ok=True)
+INPUT_ROOT=Path({input_root!r})
+MODE="train_and_evaluate"  # train_and_evaluate / evaluate_only / predict_diaries
+PROJECT_ZIP=""             # 여러 코드 ZIP이 연결됐으면 경로 지정
+PROJECT_PATH=""            # 이미 압축 해제된 프로젝트면 경로 지정
+EXPORT_DIR=INPUT_ROOT        # 사람 검토 JSON 위치
+DATASET_DIR=""             # 이미 준비한 train/dev/test.jsonl 폴더, 없으면 자동 준비
+CHECKPOINTS={{}}             # evaluate_only: {{"relation":"/kaggle/input/.../relation-seed42"}}
+BATCH_CHECKPOINT=""         # predict_diaries: 학습한 가중치 폴더
+REQUEST_DIR=INPUT_ROOT       # 앱의 Kaggle 판정 요청 JSON 위치
+RUN_NAME="experiment-v1"   # 새 실험은 새 이름 사용, 기존 결과를 덮어쓰지 않음
+TEXT_MODE="sentence"       # tokens는 별도 비교 실험
+SEEDS=[42]                  # 정식 반복 실험 예: [42,43,44]
+EPOCHS=15
+BATCH_SIZE=8
+MEASURE_END_TO_END=False     # True: 인코더 포함 시간, False: 캐시 특징+판정 모듈 시간
+API_MODEL=""               # 실제 사용 가능한 모델 ID/스냅샷 지정
+RUN_PAID_API=False
+assert MODE in {{"train_and_evaluate","evaluate_only","predict_diaries"}}
+if PROJECT_PATH:
+    PROJECT=Path(PROJECT_PATH)
+else:
+    candidates=[]
+    if PROJECT_ZIP:candidates=[Path(PROJECT_ZIP)]
     else:
-        roots=[path.parent.parent for path in INPUT_ROOT.rglob("requirements-fusion.txt") if (path.parent/"diary_verifier/fusion_train.py").exists()]
-        if roots: PROJECT=roots[0]
-        else: raise RuntimeError("코드 ZIP 또는 압축 해제된 코드 데이터셋을 연결하세요.")
-if PROJECT is None:
-    parent=RUN_ROOT/"project"
-    parent.mkdir(exist_ok=True)
-    with zipfile.ZipFile(PROJECT_ZIP) as archive:
-        if any(not (parent/name).resolve().is_relative_to(parent.resolve()) for name in archive.namelist()):
-            raise RuntimeError("안전하지 않은 ZIP 경로입니다.")
-        archive.extractall(parent)
-    roots=[path.parent.parent for path in parent.rglob("requirements-fusion.txt") if (path.parent/"diary_verifier/fusion_train.py").exists()]
-    assert len(roots)==1, "코드 ZIP 안에 프로젝트가 하나 있어야 합니다."
+        for archive_path in INPUT_ROOT.rglob("*.zip"):
+            try:
+                with zipfile.ZipFile(archive_path) as archive:
+                    if any(n.endswith("/ml/diary_verifier/fusion_train.py") or n=="ml/diary_verifier/fusion_train.py" for n in archive.namelist()):candidates.append(archive_path)
+            except zipfile.BadZipFile:pass
+    if candidates:
+        if len(candidates)!=1:raise RuntimeError("PROJECT_ZIP에 사용할 코드 ZIP 하나를 지정하세요.")
+        parent=RUN_ROOT/"project";parent.mkdir(exist_ok=True)
+        with zipfile.ZipFile(candidates[0]) as archive:
+            if any(not (parent/n).resolve().is_relative_to(parent.resolve()) or ((item.external_attr>>16)&0o170000)==0o120000 for item in archive.infolist() for n in [item.filename]):raise RuntimeError("안전하지 않은 ZIP 경로입니다.")
+            archive.extractall(parent)
+        roots=[p.parent.parent.parent for p in parent.rglob("diary_verifier/fusion_train.py")]
+    else:roots=[p.parent.parent.parent for p in INPUT_ROOT.rglob("diary_verifier/fusion_train.py")]
+    if len(roots)!=1:raise RuntimeError("판정기 코드 ZIP을 Dataset으로 연결하거나 PROJECT_PATH를 지정하세요.")
     PROJECT=roots[0]
-assert (PROJECT/"ml/diary_verifier/fusion_train.py").exists()
-os.environ["PYTHONPATH"]=str(PROJECT/"ml")
+assert (PROJECT/"ml/diary_verifier/fusion_train.py").is_file()
+os.environ["PYTHONPATH"]=str(PROJECT/"ml");sys.path.insert(0,str(PROJECT/"ml"))
 os.environ["HF_HOME"]=str(RUN_ROOT/"hf-cache")
-def run(*arguments):
-    subprocess.run([sys.executable,"-m",*map(str,arguments)],check=True,env=os.environ.copy())
-print("작업 경로:",RUN_ROOT)
+def run(*args):subprocess.run([sys.executable,"-m",*map(str,args)],check=True,env=os.environ.copy())
+print("코드:",PROJECT,"실행 방식:",MODE)
 '''),code('''subprocess.run([sys.executable,"-m","pip","install","-r",str(PROJECT/"ml/requirements-fusion.txt")],check=True)
 import torch
-print("PyTorch:",torch.__version__,"CUDA:",torch.cuda.is_available())
 DEVICE="cuda" if torch.cuda.is_available() else "cpu"
-if torch.cuda.is_available():
-    gpu=torch.cuda.get_device_properties(0)
-    print(gpu.name,round(gpu.total_memory/1024**3,1),"GiB")
-else:
-    print("CPU로도 실행하지만 실제 인코더의 특징 추출은 느릴 수 있습니다.")
-'''),md('''## 1. 검토 자료 준비
+print("PyTorch",torch.__version__,"실행 장치",DEVICE)
+if torch.cuda.is_available():print(torch.cuda.get_device_name(0))
+'''),md('''## 사람 정답 자료와 분리
 
-같은 사건·같은 그림·원본/변형본을 연결한 그룹으로 train/dev/test를 나눕니다. 사람 정답은 인코더 입력에 넣지 않습니다. 같은 이미지의 중복 저장으로 표본 수를 늘리지 않습니다. 코드의 최소 그룹 수는 충분한 연구 표본 수를 뜻하지 않습니다.
+앱에서 그림 생성 → `사람 정답 붙이기 · 학습자료 만들기` → 각 항목에 직접 판정 → 검토 저장 → 실험 JSON 내보내기.
 
-**정상·오류·판단 불가가 모두 필요**합니다. 관계 대조 학습에는 동일한 사실이 맞게/틀리게 그려진 사람 판정 쌍이 추가로 필요합니다. 실제 자료가 없으면 수집부터 진행하며 다음 셀은 중단됩니다.
-'''),code('''exports=[]
-for path in EXPORT_DIR.rglob("*.json"):
-    try:
-        value=json.loads(path.read_text())
-        if isinstance(value,dict) and value.get("records"): exports.append(path)
-    except (ValueError,UnicodeError,OSError):
-        pass
-if not exports:
-    raise RuntimeError("검토 JSON이 없습니다. 앱에서 실제 그림의 모든 사실을 사람이 판정한 뒤 내보내세요.")
-DATA=RUN_ROOT/"data-v1"
-if not (DATA/"dataset-info.json").exists():
-    run("diary_verifier.prepare",*exports,"--out",DATA)
-print((DATA/"dataset-info.json").read_text())
-'''),md('''## 2. 고정 인코더로 특징 추출
+AI 판정은 사람 정답으로 자동 복사하지 않습니다. 예시/출처 미확인 기록은 아래에서 제외하고 제외 수를 표시합니다. 불완전한 사람 판정은 중단합니다. 고정 시험 자료는 독립 복수 검토를 권장합니다.
 
-BGE-M3: 한국어 사실별 문장 1024차원. SigLIP2 Base-384: 그림 패치 576개. 두 인코더는 학습하지 않습니다. 첫 다운로드에는 디스크와 인터넷이 필요합니다.
+같은 사건·그림·원본/변형본·prompt family는 같은 그룹에 넣습니다. 70/15/15는 사건 묶음 기준입니다. 최소 3개 그룹은 실행 조건이며 충분한 연구 표본 수를 뜻하지 않습니다.
+'''),code('''DATA=None
+if MODE!="predict_diaries":
+    if DATASET_DIR:DATA=Path(DATASET_DIR)
+    else:
+        reviewed=[];excluded=0
+        for path in EXPORT_DIR.rglob("*.json"):
+            try:value=json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError,UnicodeError,OSError):continue
+            if not isinstance(value,dict) or not isinstance(value.get("records"),list):continue
+            for record in value["records"]:
+                if record.get("humanSource")=="manual_review" and record.get("imageProvenance",{}).get("kind") in {"generated_api","uploaded_generated"}:reviewed.append(record)
+                else:excluded+=1
+        print("사람 검토 기록",len(reviewed),"제외한 예시/출처 미확인 기록",excluded)
+        if not reviewed:raise RuntimeError("사람 정답이 붙은 실제 생성 그림이 없습니다. 앱에서 자료를 수집해 연결하세요. 임의 정확도를 생성하지 않습니다.")
+        export=RUN_ROOT/"human-reviewed-only.json";export.write_text(json.dumps({"records":reviewed},ensure_ascii=False),encoding="utf-8")
+        DATA=RUN_ROOT/("data-"+RUN_NAME)
+        if (DATA/"dataset-info.json").exists():raise RuntimeError("이 이름의 데이터가 이미 있습니다. DATASET_DIR로 재사용하거나 RUN_NAME을 바꾸세요.")
+        run("diary_verifier.prepare",export,"--out",DATA)
+    for name in ["train.jsonl","dev.jsonl","test.jsonl","dataset-info.json"]:
+        if not (DATA/name).is_file():raise RuntimeError("준비된 데이터 파일이 누락되었습니다: "+name)
+    print((DATA/"dataset-info.json").read_text())
+'''),md('''## 인코더 특징 추출
 
-모델 버전·전처리·입력 파일 해시를 저장하므로 이후 같은 캐시를 재사용할 수 있습니다. 인코더가 바뀌면 새 캐시와 새 판정 모듈 학습이 필요합니다. 매칭팀 모델도 같은 규약으로 교체할 수 있습니다.
-'''),code('''FEATURES=RUN_ROOT/"features-v1"
-run("diary_verifier.fusion_features",
-    "--manifests",DATA/"train.jsonl",DATA/"dev.jsonl",DATA/"test.jsonl",
-    "--cache",FEATURES,"--device",DEVICE)
-print((FEATURES/"encoders.json").read_text())
-'''),md('''## 3. 자체 판정 모듈 학습
+사람 정답을 제외한 확인 장면·인물 구별 정보·사실 하나를 인코딩합니다. 텍스트/그림 인코더 버전과 입력 해시를 고정합니다. 특징 캐시가 같은 차원이어도 모델 버전이 다르면 재사용하지 않습니다.
+'''),code('''FEATURES=RUN_ROOT/("features-"+RUN_NAME)
+if MODE!="predict_diaries":
+    options=[]
+    if MODE=="evaluate_only":
+        if not CHECKPOINTS:raise RuntimeError("CHECKPOINTS에 평가할 학습 가중치 폴더를 지정하세요.")
+        configs=[json.loads((Path(path)/"fusion_config.json").read_text()) for path in CHECKPOINTS.values()]
+        if any(c["encoders"]!=configs[0]["encoders"] for c in configs):raise RuntimeError("이 실행에서는 동일 인코더의 가중치끼리 비교하세요. 인코더가 다르면 별도 특징 캐시를 준비합니다.")
+        bundle=configs[0]["encoders"];FEATURES.mkdir(exist_ok=True)
+        existing=FEATURES/"encoders.json"
+        if existing.exists() and json.loads(existing.read_text())!=bundle:raise RuntimeError("새 특징 캐시 이름이 필요합니다.")
+        existing.write_text(json.dumps(bundle),encoding="utf-8")
+        options=["--text-model",bundle["text"]["model_id"],"--image-model",bundle["image"]["model_id"],"--pooling",bundle["text"]["pooling"],"--max-tokens",str(bundle["text"]["max_tokens"])]
+    manifests=[DATA/"test.jsonl"] if MODE=="evaluate_only" else [DATA/(n+".jsonl") for n in ["train","dev","test"]]
+    run("diary_verifier.fusion_features","--manifests",*manifests,"--cache",FEATURES,"--device",DEVICE,*options)
+'''),md('''## 학습 및 동일 시험 자료 비교
 
-기본은 문장 벡터 하나로 그림 패치를 살펴보는 `sentence` 방식입니다. 원래 토큰 특징을 제공할 수 있으면 `tokens` 방식으로 별도 실험합니다. 두 방식은 입력 정보가 다르므로 같은 것으로 취급하지 않습니다.
+A: 그림 패치를 평균한 단순 결합 모델. B: 사실 문장과 그림 패치의 어텐션 모델. C: B와 같은 구조에 동일 사실의 정상/오류 그림 쌍 대조 학습을 추가한 모델.
 
-일반 판정기와 관계 대조 판정기는 같은 자료·구조·시드·배치를 사용하고 추가 손실만 바꿉니다. 대조 손실은 같은 사실의 정상/오류 쌍만 비교하며 판단 불가는 쌍으로 강제하지 않습니다. dev loss로 체크포인트를 선택하고 test는 사용하지 않습니다.
-'''),code('''TEXT_MODE="sentence"
-SEED=42
-PLAIN=RUN_ROOT/("plain-"+TEXT_MODE)
-RELATION=RUN_ROOT/("relation-"+TEXT_MODE)
-common=["--data",DATA,"--cache",FEATURES,"--text-mode",TEXT_MODE,"--device",DEVICE,
-        "--seed",str(SEED),"--epochs","15","--batch-size","8"]
-if not (PLAIN/"fusion_config.json").exists():
-    run("diary_verifier.fusion_train",*common,"--out",PLAIN,"--pair-weight","0")
-# train에 같은 사실의 supported/contradicted 쌍이 있을 때만 대조 학습.
-sys.path.insert(0,str(PROJECT/"ml"))
-from diary_verifier.losses import claim_key
-claims={}
-for line in (DATA/"train.jsonl").read_text().splitlines():
-    example=json.loads(line)
-    for fact in example["facts"]:
-        claims.setdefault(claim_key(example,fact),set()).add(fact["label"])
-HAVE_PAIRS=any({"supported","contradicted"}<=labels for labels in claims.values())
-if HAVE_PAIRS:
-    if not (RELATION/"fusion_config.json").exists():
-        run("diary_verifier.fusion_train",*common,"--out",RELATION,"--pair-weight","0.25")
-else:
-    print("대조 쌍이 없어 일반 판정기만 학습했습니다. 관계 대조 방법의 성능으로 보고하지 마세요.")
-'''),md('''## 4. 고정 시험 자료 평가
-
-아래 예측은 저장된 특징을 사용합니다. **표시되는 시간에는 인코더 처리 시간이 제외**됩니다. API와 전체 처리 시간을 비교할 경우 `--cache ...` 대신 `--from-images`를 사용하세요. 어떤 모델이 더 좋은지는 실제 시험 결과로 확인합니다.
-'''),code('''TEST=DATA/"test.jsonl"
-PRED=RUN_ROOT/"predictions"
-PRED.mkdir(exist_ok=True)
-RUNS=[("plain",PLAIN)]+([("relation",RELATION)] if HAVE_PAIRS else [])
+같은 인코더·자료·시드·배치 조건으로 학습하며 dev loss로 체크포인트를 선택합니다. 쌍이 없는 경우 C는 실행하지 않고 생략 사유를 기록합니다. 학습을 위해 인코더를 미세조정하는 코드는 아니며 결합·판정 모듈을 학습합니다.
+'''),code('''OUT=RUN_ROOT/RUN_NAME
 predictions=[]
-for name,checkpoint in RUNS:
-    target=PRED/(name+"-"+TEXT_MODE+".jsonl")
-    if not target.exists():
-        run("diary_verifier.fusion_predict","--manifest",TEST,"--cache",FEATURES,
-            "--checkpoint",checkpoint,"--out",target,"--device",DEVICE)
-    predictions.append(target)
-run("diary_verifier.evaluate","--manifest",TEST,"--predictions",*predictions,
-    "--out",RUN_ROOT/("local-comparison-"+TEXT_MODE+".json"))
-'''),md('''## 5. 범용 API 비교 — 선택할 때만 비용 발생
+if MODE=="train_and_evaluate":
+    args=["--data",DATA,"--cache",FEATURES,"--out",OUT,"--device",DEVICE,"--epochs",str(EPOCHS),"--batch-size",str(BATCH_SIZE),"--seeds",*map(str,SEEDS),"--text-mode",TEXT_MODE]
+    if MEASURE_END_TO_END:args.append("--end-to-end")
+    run("diary_verifier.experiment",*args)
+    predictions=sorted(OUT.glob("*.jsonl"))
+elif MODE=="evaluate_only":
+    OUT.mkdir(exist_ok=True)
+    for name,checkpoint in CHECKPOINTS.items():
+        if not name or Path(name).name!=name:raise RuntimeError("비교 이름에는 폴더 경로를 쓰지 마세요.")
+        target=OUT/(name+".jsonl")
+        args=["--manifest",DATA/"test.jsonl","--checkpoint",checkpoint,"--out",target,"--device",DEVICE]
+        args += ["--from-images"] if MEASURE_END_TO_END else ["--cache",FEATURES]
+        run("diary_verifier.fusion_predict",*args);predictions.append(target)
+    run("diary_verifier.evaluate","--manifest",DATA/"test.jsonl","--predictions",*predictions,"--out",OUT/"comparison.json")
+if MODE!="predict_diaries":
+    print("성능표 HTML/CSV/JSON:",OUT)
+    from IPython.display import display,HTML
+    for path in sorted(OUT.glob("comparison*.html")):display(HTML(path.read_text(encoding="utf-8")))
+'''),md('''## 범용 API 비교 — 선택
 
-같은 그림·문맥을 강한 비교 모델에 제공합니다. 모델/스냅샷은 계정에서 사용할 수 있는 것으로 지정하세요. 정답은 입력에서 제외합니다. dry-run은 호출 수만 확인합니다. 실제 실행은 아래 옵션을 직접 바꿀 때만 진행합니다. 키는 비공개 입력으로 받아 런타임에만 보관합니다.
-'''),code('''API_MODEL=""
-RUN_PAID_API=False
-if API_MODEL:
-    run("diary_verifier.api_baseline","--manifest",TEST,"--model",API_MODEL,
-        "--out",PRED/"api.jsonl","--dry-run")
-if RUN_PAID_API:
-    assert API_MODEL, "비교할 API 모델을 지정하세요."
-    import getpass
-    os.environ["DIARY_API_KEY"]=getpass.getpass("API key: ")
-    try:
-        run("diary_verifier.api_baseline","--manifest",TEST,"--model",API_MODEL,"--out",PRED/"api.jsonl")
-    finally:
-        os.environ.pop("DIARY_API_KEY",None)
-    run("diary_verifier.evaluate","--manifest",TEST,"--predictions",*predictions,PRED/"api.jsonl",
-        "--out",RUN_ROOT/("api-comparison-"+TEXT_MODE+".json"))
-'''),md('''## 6. 결과 저장과 앱 연결
+정답을 제외한 동일 그림·장면·인물·사실을 제공합니다. 사용할 수 있는 강한 모델과 정확한 버전을 지정하세요. `RUN_PAID_API=False`이면 실제 호출하지 않습니다. API 실패/누락 결과를 정상으로 대체하지 않습니다.
 
-ZIP에는 학습한 판정 모듈·설정·예측·평가를 담고, 대용량 인코더 캐시·API 키는 넣지 않습니다. 세션 종료 전에 Kaggle Output 저장 또는 Colab 다운로드를 진행하세요. 데이터 버전은 따로 보관합니다.
+캐시 판정 시간과 API 전체 응답 시간을 직접 비교하지 마세요. 시간 비교는 `MEASURE_END_TO_END=True`로 실행하고 환경·단위·호출 수를 함께 기록하세요.
+'''),code('''if MODE!="predict_diaries" and API_MODEL:
+    run("diary_verifier.api_baseline","--manifest",DATA/"test.jsonl","--model",API_MODEL,"--out",OUT/"api.jsonl","--dry-run")
+    if RUN_PAID_API:
+        try:
+            from kaggle_secrets import UserSecretsClient
+            api_key=UserSecretsClient().get_secret("DIARY_API_KEY")
+        except Exception:
+            import getpass
+            api_key=getpass.getpass("API key: ")
+        os.environ["DIARY_API_KEY"]=api_key
+        try:run("diary_verifier.api_baseline","--manifest",DATA/"test.jsonl","--model",API_MODEL,"--out",OUT/"api.jsonl")
+        finally:os.environ.pop("DIARY_API_KEY",None);del api_key
+        run("diary_verifier.evaluate","--manifest",DATA/"test.jsonl","--predictions",*predictions,OUT/"api.jsonl","--out",OUT/"comparison-with-api.json")
+'''),md('''## 앱의 그림을 Kaggle에서 판정 — predict_diaries
 
-로컬에서 같은 코드와 환경을 준비한 뒤:
+앱의 완성 화면 → `판정기 연결 · Kaggle 자료` → `Kaggle 판정 요청 저장`.
+
+요청 JSON과 학습 가중치를 Dataset으로 연결하고 위의 MODE/BATCH_CHECKPOINT를 설정합니다. 아래에서 만든 `diary-predictions.json`을 내려받아 앱의 `Kaggle 결과 불러오기`로 가져옵니다. 그림·사실 목록 해시가 달라지면 연결을 거부합니다. 이 모드는 사람 정답이 없어도 추론할 수 있지만 정확도는 계산하지 않습니다.
+'''),code('''if MODE=="predict_diaries":
+    if not BATCH_CHECKPOINT:raise RuntimeError("BATCH_CHECKPOINT에 실제 사람 정답으로 학습한 가중치 폴더를 지정하세요.")
+    requests=[]
+    for path in REQUEST_DIR.rglob("*.json"):
+        try:value=json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError,UnicodeError,OSError):continue
+        if isinstance(value,dict) and value.get("kind")=="memory_connect_verification_requests":requests.append(path)
+    if not requests:raise RuntimeError("앱에서 내보낸 Kaggle 판정 요청 JSON을 연결하세요.")
+    OUT.mkdir(exist_ok=True)
+    run("diary_verifier.batch_verify","--requests",*requests,"--checkpoint",BATCH_CHECKPOINT,"--out",OUT/"diary-predictions.json","--device",DEVICE)
+    print("앱에서 불러올 결과:",OUT/"diary-predictions.json")
+'''),md('''## 결과 내려받기와 실시간 앱 연결
+
+아래 ZIP에는 판정 모듈 가중치·설정·예측·성능표를 넣습니다. 원본 이미지·API 키·거대한 인코더 캐시는 포함하지 않습니다. Kaggle Output을 저장하고 ZIP/JSON을 내려받으세요.
+
+실시간 앱 연결은 내려받은 가중치를 로컬에서 실행합니다:
 
 ```bash
-PYTHONPATH=ml python -m diary_verifier.fusion_serve --checkpoint <내려받은 학습 폴더> --port 8010
+PYTHONPATH=ml python -m diary_verifier.fusion_serve --checkpoint <학습 폴더> --port 8010
 ```
 
-Node 앱 `.env`에 `DIARY_VERIFY_BACKEND=local`, `DIARY_VERIFIER_URL=http://127.0.0.1:8010`을 설정하고 `/verification`에서 자체 모델을 선택합니다. 실제 학습 가중치가 없으면 실행되지 않으며 예시/API 판정으로 대체하지 않습니다.
-'''),code('''RESULT=RUN_ROOT/"memory-connect-fusion-results.zip"
+앱 `.env`: `DIARY_VERIFY_BACKEND=local`, `DIARY_VERIFIER_URL=http://127.0.0.1:8010`, `DIARY_VERIFY_AUTO=true`.
+
+그림 생성 → 사실별 자동 판정 → 결과와 함께 저장됩니다. 서버 미연결·오류는 미판정으로 남고 범용 API로 자동 대체하지 않습니다. 기존 기록은 유지합니다.
+'''),code('''RESULT=RUN_ROOT/(RUN_NAME+"-results.zip")
 with zipfile.ZipFile(RESULT,"w",zipfile.ZIP_DEFLATED) as archive:
-    for folder in [PLAIN]+([RELATION] if HAVE_PAIRS else [])+[PRED]:
-        if folder.exists():
-            for path in folder.rglob("*"):
-                if path.is_file():archive.write(path,path.relative_to(RUN_ROOT))
-    for path in RUN_ROOT.glob("*comparison-*.json"):
-        archive.write(path,path.name)
-    archive.write(DATA/"dataset-info.json","dataset-info.json")
-print("저장할 결과:",RESULT)
+    for path in OUT.rglob("*"):
+        if path.is_file() and path.suffix in {".pt",".json",".jsonl",".csv",".html",".md"}:archive.write(path,path.relative_to(OUT))
+    if DATA is not None:archive.write(DATA/"dataset-info.json","dataset-info.json")
+print("다운로드할 결과 ZIP:",RESULT)
 ''')]
-    for index,cell in enumerate(cells):cell['id']=f'fusion-{platform}-{index:02d}'
-    return {'cells':cells,'metadata':{'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},'language_info':{'name':'python','version':'3.12'},'memory_connect':{'platform':platform,'contains_trained_results':False,'training_scope':'fusion_head_only_frozen_encoders'}},'nbformat':4,'nbformat_minor':5}
+    for i,cell in enumerate(cells):cell['id']=f'verifier-{platform}-{i:02d}'
+    return {'cells':cells,'metadata':{'kernelspec':{'display_name':'Python 3','language':'python','name':'python3'},'language_info':{'name':'python','version':'3.12'},'memory_connect':{'platform':platform,'contains_trained_results':False,'training_scope':'fusion_head_only_frozen_encoders','version':'0.14.0'}},'nbformat':4,'nbformat_minor':5}
 
 if __name__=='__main__':
-    for platform in ('kaggle','colab'):
-        path=ROOT/'notebooks'/f'memory_connect_fusion_{platform}.ipynb'
-        path.write_text(json.dumps(notebook(platform),ensure_ascii=False,indent=2))
-        print(path)
+    for platform in ['kaggle','colab']:
+        value=notebook(platform)
+        for stem in ['memory_connect_verifier','memory_connect_fusion']:
+            path=ROOT/'notebooks'/f'{stem}_{platform}.ipynb';path.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8');print(path)

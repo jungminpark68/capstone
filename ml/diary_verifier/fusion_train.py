@@ -12,7 +12,7 @@ from .shared_encoder import FactFusionHead
 from .losses import paired_batches,verification_loss,claim_key
 
 
-def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,pair_weight=.25,hidden=256,heads=4,text_mode='sentence',seed=42,device=None,patience=4):
+def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,pair_weight=.25,hidden=256,heads=4,text_mode='sentence',seed=42,device=None,patience=4,fusion_method='cross_attention'):
     data,out=Path(data),Path(out)
     if (out/'fusion_config.json').exists():raise ValueError('Choose a new run directory; existing learned weights are not overwritten')
     if epochs<1 or batch_size<1 or pair_weight<0 or learning_rate<=0 or hidden<1 or heads<1 or hidden%heads or patience<1:raise ValueError('Invalid training settings')
@@ -28,7 +28,7 @@ def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,p
     for name in ('train','dev'):cache.assert_manifest(data/(name+'.jsonl'))
     rng=random.Random(seed);torch.manual_seed(seed)
     device=device or ('cuda' if torch.cuda.is_available() else 'cpu')
-    head=FactFusionHead(cache.text_spec,cache.image_spec.patch_dim,hidden,heads,text_mode=text_mode).to(device)
+    head=FactFusionHead(cache.text_spec,cache.image_spec.patch_dim,hidden,heads,text_mode=text_mode,fusion_method=fusion_method).to(device)
     optimizer=torch.optim.AdamW(head.parameters(),lr=learning_rate,weight_decay=.01)
     best,stale,history=float('inf'),0,[]
     out.mkdir(parents=True,exist_ok=True)
@@ -60,7 +60,7 @@ def train_fusion(data,cache_path,out,epochs=15,batch_size=8,learning_rate=3e-4,p
             best,stale=dev_loss,0
             temp=out/'fusion_head.tmp';torch.save({name:value.detach().cpu() for name,value in head.state_dict().items()},temp);temp.replace(out/'fusion_head.pt')
             config={'architecture':'shared_encoder_fact_fusion','weights_learned':True,'data_purpose':purpose,'labels':list(LABELS),'encoders':cache.bundle,
-                    'hidden':hidden,'heads':heads,'text_mode':text_mode,'training_scope':'fusion_head_only_frozen_encoders','encoders_finetuned':False,'seed':seed,'pair_weight':pair_weight,
+                    'hidden':hidden,'heads':heads,'text_mode':text_mode,'fusion_method':fusion_method,'training_scope':'fusion_head_only_frozen_encoders','encoders_finetuned':False,'seed':seed,'pair_weight':pair_weight,
                     'train_manifest_sha256':file_sha(data/'train.jsonl'),'dev_manifest_sha256':file_sha(data/'dev.jsonl'),'best_dev_loss':best,'weights_sha256':file_sha(out/'fusion_head.pt'),
                     'trainable_parameters':sum(parameter.numel() for parameter in head.parameters()),'test_used_for_selection':False}
             (out/'fusion_config.json').write_text(json.dumps(config,ensure_ascii=False,indent=2))
@@ -80,10 +80,11 @@ def main():
     parser.add_argument('--hidden',type=int,default=256)
     parser.add_argument('--heads',type=int,default=4)
     parser.add_argument('--text-mode',choices=['sentence','tokens'],default='sentence')
+    parser.add_argument('--fusion-method',choices=['cross_attention','pooled'],default='cross_attention')
     parser.add_argument('--seed',type=int,default=42)
     parser.add_argument('--device')
     args=parser.parse_args()
-    result=train_fusion(args.data,args.cache,args.out,epochs=args.epochs,batch_size=args.batch_size,learning_rate=args.lr,pair_weight=args.pair_weight,hidden=args.hidden,heads=args.heads,text_mode=args.text_mode,seed=args.seed,device=args.device)
+    result=train_fusion(args.data,args.cache,args.out,epochs=args.epochs,batch_size=args.batch_size,learning_rate=args.lr,pair_weight=args.pair_weight,hidden=args.hidden,heads=args.heads,text_mode=args.text_mode,seed=args.seed,device=args.device,fusion_method=args.fusion_method)
     print(json.dumps({'checkpoint':args.out,'training_scope':result['training_scope'],'data_purpose':result['data_purpose'],'trainable_parameters':result['trainable_parameters']}))
 
 

@@ -98,16 +98,18 @@ class HuggingFaceTextEncoder:
 
 class FactFusionHead(torch.nn.Module):
     """Trainable cross-attention over text tokens and image patches. Random until trained."""
-    def __init__(self, spec: EncoderSpec, image_dim: int, hidden=256, heads=4,text_mode='tokens'):
+    def __init__(self, spec: EncoderSpec, image_dim: int, hidden=256, heads=4,text_mode='tokens',fusion_method='cross_attention'):
         super().__init__()
         if text_mode not in ('sentence','tokens'):raise ValueError('Choose sentence or tokens explicitly')
         if text_mode=='tokens' and not spec.supports_tokens:raise ValueError('Token-mode verification needs pre-autoencoder token features. Use an explicitly trained sentence-mode head for pooled vectors.')
         self.text_mode=text_mode
+        if fusion_method not in ('cross_attention','pooled'):raise ValueError('Unknown fusion method')
+        self.fusion_method=fusion_method
         self.encoder_fingerprint=spec.fingerprint
         self.image_dim=image_dim
         self.text_projection=torch.nn.Linear(spec.token_dim if text_mode=='tokens' else spec.sentence_dim,hidden)
         self.image_projection=torch.nn.Linear(image_dim,hidden)
-        self.cross_attention=torch.nn.MultiheadAttention(hidden,heads,batch_first=True)
+        self.cross_attention=torch.nn.MultiheadAttention(hidden,heads,batch_first=True) if fusion_method=='cross_attention' else None
         self.classifier=torch.nn.Sequential(torch.nn.LayerNorm(hidden*3),torch.nn.Linear(hidden*3,hidden),torch.nn.GELU(),torch.nn.Linear(hidden,3))
 
     def forward(self,text:EncodedText,image_patches,image_mask=None):
@@ -125,7 +127,11 @@ class FactFusionHead(torch.nn.Module):
         keys=self.image_projection(prepare(image_patches,self.image_projection))
         if image_mask is not None and (image_mask.shape!=image_patches.shape[:2] or not image_mask.bool().any(1).all()):raise ValueError('Invalid image patch mask')
         padding=None if image_mask is None else ~image_mask.to(device=keys.device,dtype=torch.bool)
-        aligned,_=self.cross_attention(query,keys,keys,key_padding_mask=padding,need_weights=False)
+        if self.cross_attention is not None:
+            aligned,_=self.cross_attention(query,keys,keys,key_padding_mask=padding,need_weights=False)
+        else:
+            valid=(~padding if padding is not None else torch.ones(keys.shape[:2],dtype=torch.bool,device=keys.device)).unsqueeze(-1)
+            aligned=((keys*valid).sum(1)/valid.sum(1)).unsqueeze(1).expand(-1,query.shape[1],-1)
         mask=(text.mask.to(query.device) if self.text_mode=='tokens' else torch.ones(query.shape[:2],device=query.device,dtype=torch.bool)).unsqueeze(-1)
         if mask.is_inference() and torch.is_grad_enabled():mask=mask.clone()
         q=(query*mask).sum(1)/mask.sum(1)

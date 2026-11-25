@@ -1,5 +1,7 @@
 # 기억잇다 · 한국어 문장–이미지 판정기
 
+v0.14에서는 **`notebooks/memory_connect_verifier_kaggle.ipynb`**를 사용합니다. 학습·평가, 기존 가중치 평가, 앱의 그림 일괄 판정 세 가지 방식이 있습니다. 독립 코드 ZIP의 README와 [통합 사용 안내](../docs/kaggle-verifier-guide.md)를 참고하세요. `diary_verifier.experiment`는 pooled/plain/relation을 비교하고 HTML·CSV·JSON 성능표와 시드별 요약을 저장합니다. 앱과는 HTTP 서버 또는 그림·사실 지문이 연결된 JSON 파일로 연동합니다.
+
 주 경로는 **BGE-M3 한국어 문장 특징 + SigLIP2 그림 패치 특징 + 직접 학습하는 연결·분류 모듈**이다. 일치(`supported`)·불일치(`contradicted`)·판단 불가(`uncertain`)로 분류한다. 두 인코더는 고정하고 판정 모듈만 학습한다. 인코더 파인튜닝을 완료했다는 의미는 아니다.
 
 실행 코드와 노트북을 제공한다. 실제 생성 그림·사람 정답 데이터와 연구용 학습 완료 가중치, 정확도 결과는 아직 없다. 실제 사전학습 인코더의 한국어·이미지 입력은 CPU에서 확인했다. 소프트웨어 테스트의 임의 특징·가중치는 성능 증거가 아니며 실제 모델 서버에서 거부한다.
@@ -107,5 +109,7 @@ DIARY_VERIFIER_URL=http://127.0.0.1:8010
 PYTHONPATH=ml python -m unittest discover -s ml/tests -v
 npm test
 ```
+
+독립 판정기 ZIP에서는 Python 명령을 사용합니다. `npm test`와 앱 JavaScript 연동 시험은 전체 웹앱 패키지에서 실행합니다.
 
 테스트는 캐시·학습 gradient·가중치 저장/재로딩·교체 규약·자료 누출 방지·API 연결을 확인한다. 실제 판정 성능 검증을 대신하지 않는다.

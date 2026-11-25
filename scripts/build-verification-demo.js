@@ -4,11 +4,11 @@ const root=new URL('../',import.meta.url);
 const read=path=>readFile(new URL(path,root),'utf8');
 let html=await read('public/verification-lab.html');
 const css=await read('public/verification-lab.css');
-const files=['public/verification-core.js','public/verification-samples.js','public/diary-record.js','public/generation-plan.js','public/lab-samples.js','public/verification-lab.js'];
+const files=['public/verification-core.js','public/verification-samples.js','public/diary-record.js','public/diary-verification.js','public/generation-plan.js','public/lab-samples.js','public/verification-lab.js'];
 const scripts=[];
 for(const file of files){
  let source=await read(file);
- source=source.replace(/^import[^\n]*\n/gm,'').replace(/\bexport\s+(?=(?:const|function|class)\b)/g,'')
+ source=source.replace(/^import[^\n]*\n/gm,'').replace(/\bexport\s+(?=(?:const|function|class|async)\b)/g,'')
   .replace("const labStandalone=location.protocol==='file:';",'const labStandalone=true;');
  scripts.push(source);
 }

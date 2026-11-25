@@ -5,6 +5,7 @@ import {localDate,readableDate,newSession,currentImage,makeEntry,restorable,conv
 import {mountSceneForm} from './scene-form.js';
 import {localExperienceEvents,createExperienceBundle,chooseExperience,prepareExperience,collectionQuestion,applyCollectionAnswer,composeExperienceScene,selectedDiaryText,applyExperiencePreference,reconcileExperienceContext} from './experience-flow.js';
 import {renderDiaryDetail,diaryImageSource} from './diary-view.js';
+import {diaryCheckRequest,diaryCheckPrediction,currentDiaryCheck,renderDiaryCheck} from './diary-verification.js';
 const STANDALONE=false;
 if(STANDALONE)document.querySelectorAll('a[href="/verification"]').forEach(link=>link.href='verification-demo.html');
 const $=id=>document.getElementById(id);
@@ -13,7 +14,8 @@ const writing=new Set(['photos','conversation','rest','tomorrow','review','resul
 let state=null,savedDraft=null,active='home',busy=false,retryAction=null,selectedEntry=null;
 let calendarReturn='home',editingEventId=null,editingExisting=false;
 let saveTimer,saveQueue=Promise.resolve(),generation=0,recognition=null,recording=false;
-let sceneForm=null;
+let sceneForm=null,checkAbort=null;
+let verifierConfig={verificationBackend:'local',autoVerification:true,localVerificationEnabled:false,apiVerificationEnabled:false};
 resetHomeDate();
 function notify(message,error=false,detail=''){
  $('feedback').hidden=!message;$('feedback').classList.toggle('error',error);$('status').textContent=message;
@@ -57,9 +59,9 @@ async function task(fn,message,{drawing=false}={}){
  }finally{busy=false;$('busySpinner').hidden=true;$('busyHint').hidden=true;$('workspace').removeAttribute('aria-busy');document.querySelectorAll('button,input,textarea,select').forEach(e=>e.disabled=false);syncSpeechUI();}
 }
 $('retry').onclick=()=>retryAction?.();
-async function api(path,data){
+async function api(path,data,{signal}={}){
  if(STANDALONE){if(path==='scene-text')return {body:selectedDiaryText(data),mode:'local'};if(path==='scene-draft'){const candidates=localExperienceEvents(data.session);return {candidates,candidate:candidates[0]};}if(path==='scene-answer'){const candidate=applyCollectionAnswer(data.candidate,data.field,data.answer);return {candidate,nextQuestion:collectionQuestion(candidate)};}if(path==='question')return localReply({...data,turns:experienceTurns(data.turns)});if(path==='plans')return {events:localPlans(data),mode:'local'};if(path==='draft'){const answers=experienceTurns(data.turns).map(t=>t.answer.trim()).filter(Boolean);if(!answers.length)throw new Error('오늘 실제로 하신 이야기를 한 가지만 들려주세요.');return {title:'오늘의 소중한 기억',body:answers.join('\n'),scene:answers.join(' ').slice(0,3000),mode:'local'};}throw new Error('단독 체험 화면에서는 AI 그림을 만들 수 없어요. 서버 실행과 API 키 연결이 필요해요.');}
- const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(['illustration','scene-illustration'].includes(path)?135000:55000)});
+ const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(path==='verification'?100000:55000)]):AbortSignal.timeout(['illustration','scene-illustration'].includes(path)?135000:path==='verification'?100000:55000)});
  let result;try{result=await response.json();}catch{throw new Error('서버의 응답을 읽지 못했어요. 서버가 실행 중인지 확인해 주세요.');}if(!response.ok)throw new Error(result.error||'AI 연결에 실패했어요.');return result;
 }
 function read(text){
@@ -188,15 +190,68 @@ function submitSceneAnswer(override){
  task(async()=>{const response=await api('scene-answer',{candidate,field:next.field,answer});putSelectedCandidate(response.candidate);state.sceneAnswer='';paintScenePreparation();await persist();},'말씀하신 내용을 남기고 있어요…');
 }
 $('sceneReply').onclick=()=>submitSceneAnswer();$('sceneUnknown').onclick=()=>submitSceneAnswer('잘 모르겠어요.');$('sceneDecline').onclick=()=>submitSceneAnswer('이 질문은 건너뛸게요.');$('readSceneQuestion').onclick=()=>read($('sceneQuestion').textContent);
-$('confirmSceneDraw').onclick=()=>task(async()=>{if(!sceneForm||!$('sceneConfirmed').checked)throw new Error('선택한 장면의 내용이 맞는지 확인해 주세요.');const record=sceneForm.confirm(true);chooseExperience(state.experienceBundle,record.id);state.sceneRecord=record;state.sceneCandidate=record;putSelectedCandidate(record);state.sceneRecord=record;state.draft.scene=record.scene;state.draft.title=record.title;try{const text=await api('scene-text',record);state.draft.body=text.body;}catch{state.draft.body=selectedDiaryText(record);}const response=await api('scene-illustration',record);state.image=response.image;state.imageScene=record.scene;state.imageEventId=record.id;state.imageGeneration=response.generation;state.scenePreparationOpen=false;paintResult();view('result');await persist();},'확인한 내용으로 그림을 그리고 있어요…',{drawing:true});
+$('confirmSceneDraw').onclick=async()=>{let drawn=false;await task(async()=>{if(!sceneForm||!$('sceneConfirmed').checked)throw new Error('선택한 장면의 내용이 맞는지 확인해 주세요.');const record=sceneForm.confirm(true);chooseExperience(state.experienceBundle,record.id);state.sceneRecord=record;state.sceneCandidate=record;putSelectedCandidate(record);state.sceneRecord=record;state.draft.scene=record.scene;state.draft.title=record.title;try{const text=await api('scene-text',record);state.draft.body=text.body;}catch{state.draft.body=selectedDiaryText(record);}const response=await api('scene-illustration',record);adoptDiaryImage(response,record.id,record.scene);drawn=true;state.scenePreparationOpen=false;paintResult();view('result');await persist();},'확인한 내용으로 그림을 그리고 있어요…',{drawing:true});if(drawn&&active==='result'&&currentImage(state))await runDiaryCheck({automatic:true});};
 $('verifyImage').onclick=async()=>{
  if(!state?.draft||!currentImage(state)){notify('먼저 그림을 준비해 주세요.');return;}
  await persist();
- try{sessionStorage.setItem('memory-verification-handoff-v1',JSON.stringify({scene:state.draft.scene,image:currentImage(state),record:state.sceneRecord||null,generation:state.imageGeneration||null}));}
+ try{sessionStorage.setItem('memory-verification-handoff-v1',JSON.stringify({scene:state.draft.scene,image:currentImage(state),record:state.sceneRecord||null,generation:state.imageGeneration||null,verification:currentDiaryCheck(state)}));}
  catch{notify('그림이 커서 검증 화면으로 옮기지 못했어요. 그림을 파일로 보관한 뒤 체험 화면에서 직접 고를 수 있어요.',true);return;}
  location.href=STANDALONE?'verification-demo.html#custom':'/verification#custom';
 };
-function paintResult(){paintImportance();$('resultDate').textContent=readableDate(state.date);$('resultHeading').textContent=state.draft.title;$('resultBody').textContent=state.draft.body;$('illustration').src=currentImage(state);}
+function paintResult(){paintImportance();$('resultDate').textContent=readableDate(state.date);$('resultHeading').textContent=state.draft.title;$('resultBody').textContent=state.draft.body;$('illustration').src=currentImage(state);paintDiaryCheck();}
+function adoptDiaryImage(response,eventId,scene){
+ checkAbort?.abort();checkAbort=null;state.image=response.image;state.imageScene=scene;state.imageEventId=eventId;
+ state.imageGeneration=response.generation||null;state.imageId=crypto.randomUUID();state.imageVerification=null;
+}
+function paintDiaryCheck(){
+ if(!state)return;
+ const image=currentImage(state);$('diaryVerificationPanel').hidden=!image;if(!image)return;
+ state.imageId=state.imageId||crypto.randomUUID();
+ let check=currentDiaryCheck(state);
+ if(check?.status==='checking'&&!checkAbort){check={...check,status:'not_run',message:'이전 확인을 마치지 못했어요. 그림을 다시 만들지 않고 확인만 재시도할 수 있어요.'};state.imageVerification=check;}
+ renderDiaryCheck($('diaryVerificationView'),check);
+ const checking=check?.status==='checking';$('runDiaryVerification').disabled=checking;$('save').disabled=checking;
+ $('skipDiaryVerification').hidden=!checking;$('runDiaryVerification').textContent=check?.status==='completed'?'그림 다시 확인하기':'그림 확인하기';
+}
+async function runDiaryCheck({automatic=false}={}){
+ if(!state||!currentImage(state)||currentDiaryCheck(state)?.status==='checking')return;
+ const owner=state,image=currentImage(owner),imageId=owner.imageId||(owner.imageId=crypto.randomUUID()),backend=$('diaryVerifierBackend').value;
+ const recordId=owner.imageGeneration?.recordAtGeneration?.id||owner.sceneRecord?.id;
+ if(automatic&&(!verifierConfig.autoVerification||backend==='api'&&!verifierConfig.autoApiVerification||STANDALONE||!(backend==='local'?verifierConfig.localVerificationEnabled:verifierConfig.apiVerificationEnabled))){
+  owner.imageVerification={status:'not_run',imageId,recordId,message:'아직 판정하지 않았어요. 판정기를 연결하거나 Kaggle에서 확인한 결과를 가져올 수 있어요.'};paintDiaryCheck();await persist();return;
+ }
+ const runId=crypto.randomUUID(),controller=new AbortController();checkAbort=controller;
+ owner.imageVerification={status:'checking',imageId,recordId,runId};paintDiaryCheck();await persist();
+ const fresh=()=>state===owner&&owner.imageId===imageId&&owner.image===image&&owner.imageVerification?.runId===runId;
+ try{
+  const request=await diaryCheckRequest({image,generation:owner.imageGeneration,sceneRecord:owner.sceneRecord});
+  if(!fresh())return;
+  const value=await api('verification',{backend,image:request.image,scene:request.scene,characters:request.characters,facts:request.facts.map(fact=>fact.text)},{signal:controller.signal});
+  if(fresh())owner.imageVerification=diaryCheckPrediction(request,value,{imageId});
+ }catch(error){if(fresh())owner.imageVerification={status:'failed',imageId,recordId,message:STANDALONE?'단독 HTML에서는 Kaggle 결과 파일을 불러와 확인할 수 있어요.':error.message||'지금은 그림을 확인하기 어려워요. 그림은 그대로 남아 있어요.'};}
+ finally{if(checkAbort===controller)checkAbort=null;if(state===owner&&owner.imageId===imageId){paintDiaryCheck();await persist();}}
+}
+$('runDiaryVerification').onclick=()=>runDiaryCheck();
+$('skipDiaryVerification').onclick=()=>{checkAbort?.abort();checkAbort=null;const check=currentDiaryCheck(state);if(check)state.imageVerification={status:'not_run',imageId:check.imageId,recordId:check.recordId,message:'그림 확인은 나중에 하기로 했어요.'};paintDiaryCheck();scheduleSave();};
+function downloadCheckFile(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('exportKaggleRequest').onclick=async()=>{
+ if(!state||!currentImage(state))return;
+ try{const item=await diaryCheckRequest({image:currentImage(state),generation:state.imageGeneration,sceneRecord:state.sceneRecord});downloadCheckFile(`기억잇다_Kaggle_판정요청_${state.date}.json`,{schemaVersion:1,kind:'memory_connect_verification_requests',items:[item]});$('diaryVerifierNotice').textContent='이 파일을 Kaggle 판정 노트북의 입력 자료로 연결해 주세요. 사람 정답은 포함하지 않았어요.';}
+ catch(error){$('diaryVerifierNotice').textContent=error.message;}
+};
+$('importKaggleResult').onchange=async event=>{
+ const file=event.target.files?.[0];event.target.value='';if(!file||!state)return;
+ const owner=state,imageId=owner.imageId,image=currentImage(owner);
+ try{
+  if(file.size>2_000_000)throw new Error('판정 결과 JSON은 2MB 이하로 준비해 주세요.');
+  const value=JSON.parse(await file.text());if(value.kind!=='memory_connect_verification_predictions'||value.schemaVersion!==1||!Array.isArray(value.items))throw new Error('Kaggle 판정 결과 파일을 선택해 주세요.');
+  const request=await diaryCheckRequest({image,generation:owner.imageGeneration,sceneRecord:owner.sceneRecord});
+  const matches=value.items.filter(item=>item.requestFingerprint===request.requestFingerprint);if(matches.length!==1)throw new Error('이 그림과 사실 목록에 해당하는 결과가 정확히 한 개 있어야 해요.');
+  const check=diaryCheckPrediction(request,matches[0],{imageId,source:'kaggle_import'});
+  if(state!==owner||owner.imageId!==imageId||currentImage(owner)!==image)return;
+  checkAbort?.abort();checkAbort=null;owner.imageVerification=check;paintDiaryCheck();await persist();$('diaryVerifierNotice').textContent='현재 그림과 사실 목록이 일치하는 Kaggle 판정 결과를 가져왔어요.';
+ }catch(error){$('diaryVerifierNotice').textContent=error.message||'판정 결과를 읽지 못했어요.';}
+};
 function paintImportance(){
  const bundle=state.experienceBundle;$('experienceRating').hidden=!bundle?.selectedEventId;if(!bundle?.selectedEventId)return;
  $('ratingStars').replaceChildren();const rating=bundle.importance;
@@ -206,11 +261,16 @@ function paintImportance(){
 function setImportance(value){const bundle=state.experienceBundle,event=selectedExperience();if(!event)return;const status=value===null?'skipped':'provided';bundle.importance={eventId:event.id,value,status,answeredAt:new Date().toISOString()};event.importanceRating=value;event.importanceStatus=status;paintImportance();scheduleSave();}
 $('skipRating').onclick=()=>setImportance(null);
 $('resultEdit').onclick=()=>{paintReview();view('review');$('editToggle').click();};
-$('redraw').onclick=async()=>{if(await ask('그림을 다시 그릴까요?','같은 이야기로 새로운 그림을 만들어요. 추가 API 비용이 발생해요.','다시 그리기')){const old=state.image;const oldScene=state.imageScene;await task(async()=>{const response=state.sceneRecord?await api('scene-illustration',state.sceneRecord):await api('illustration',state.draft);state.image=response.image;state.imageScene=state.draft.scene.trim();if(response.generation)state.imageGeneration=response.generation;if(state.sceneRecord)state.imageEventId=state.sceneRecord.id;paintResult();await persist();},'새로운 그림을 그리고 있어요…',{drawing:true});if(!state.image){state.image=old;state.imageScene=oldScene;}}};
+$('redraw').onclick=async()=>{
+ if(!await ask('그림을 다시 그릴까요?','같은 이야기로 새로운 그림을 만들고 연결된 판정기로 다시 확인해요. 그림 생성에 추가 API 비용이 발생해요.','다시 그리기'))return;
+ let drawn=false;await task(async()=>{const response=state.sceneRecord?await api('scene-illustration',state.sceneRecord):await api('illustration',state.draft);adoptDiaryImage(response,state.sceneRecord?.id||null,state.draft.scene.trim());drawn=true;paintResult();await persist();},'새로운 그림을 그리고 있어요…',{drawing:true});
+ if(drawn&&active==='result'&&currentImage(state))await runDiaryCheck({automatic:true});
+};
 $('backToTalk').onclick=backToToday;
 async function saveEntry(textOnly=false){
+ if(currentDiaryCheck(state)?.status==='checking'){notify('그림을 확인 중이에요. 잠시 기다리거나 확인은 나중에 하기를 선택해 주세요.');return;}
  if(!textOnly&&state.experienceBundle?.importance.status==='not_asked'){notify('이 경험의 별점을 고르거나 나중에 매기기를 선택해 주세요.');$('experienceRating').scrollIntoView({block:'center'});return;}
- await task(async()=>{const entry=makeEntry(state,state.entryId||(state.entryId=crypto.randomUUID()));if(textOnly){entry.image='';entry.imageKind=null;}else if(!entry.image)throw new Error('저장할 그림이 없어요. 글로 먼저 저장할 수 있어요.');
+ await task(async()=>{const entry=makeEntry(state,state.entryId||(state.entryId=crypto.randomUUID()));if(textOnly){entry.image='';entry.imageKind=null;delete entry.imageId;delete entry.verification;delete entry.generation;}else if(!entry.image)throw new Error('저장할 그림이 없어요. 글로 먼저 저장할 수 있어요.');
  await putEntry(entry);selectedEntry=entry;await clearWorking();$('doneDescription').textContent=textOnly?'그림이 없어도 소중한 하루의 기록이에요. 내 일기장에서 다시 만날 수 있어요.':'나눈 이야기와 그림을 내 일기장에 담았어요. 언제든 다시 펼쳐보세요.';view('done');
  },'일기장에 소중히 담고 있어요…');
 }
@@ -255,7 +315,7 @@ $('microphone').onclick=()=>{
 syncSpeechUI();
 async function initialize(){
  if(STANDALONE){$('mode').textContent='체험으로 둘러보기';$('connectionInfo').textContent='이 파일은 체험용이에요. 실제 AI 대화와 그림 생성은 서버를 실행하고 API 키를 연결해야 해요.';}
- else try{const response=await fetch('/api/config');if(!response.ok)throw new Error();const config=await response.json();$('mode').textContent=config.aiEnabled?'오늘의 그림일기':'체험으로 둘러보기';$('connectionInfo').textContent=config.aiEnabled?'서버에 API 키가 설정돼 있어요. 실제 이용 가능 여부는 모델 권한과 결제 상태에 따라 달라요.':'현재는 규칙 기반 체험 모드예요. 실제 AI 사용에는 서버의 .env에 API 키 설정이 필요해요.';}catch{$('mode').textContent='연결 확인 필요';$('connectionInfo').textContent='서버 연결을 확인해 주세요.';}
+ else try{const response=await fetch('/api/config');if(!response.ok)throw new Error();const config=await response.json();verifierConfig={...verifierConfig,...config};$('diaryVerifierBackend').value=config.verificationBackend||'local';$('mode').textContent=config.aiEnabled?'오늘의 그림일기':'체험으로 둘러보기';$('connectionInfo').textContent=config.aiEnabled?'서버에 API 키가 설정돼 있어요. 실제 이용 가능 여부는 모델 권한과 결제 상태에 따라 달라요.':'현재는 규칙 기반 체험 모드예요. 실제 AI 사용에는 서버의 .env에 API 키 설정이 필요해요.';}catch{$('mode').textContent='연결 확인 필요';$('connectionInfo').textContent='서버 연결을 확인해 주세요.';}
  try{const stored=await getDraft();if(restorable(stored))savedDraft=stored;renderResume();}catch{$('autosaveStatus').textContent='이 브라우저에서는 임시 저장을 사용할 수 없어요.';}
 }
 initialize();refreshHomeSchedule();

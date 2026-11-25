@@ -21,7 +21,7 @@ class FusionCheckpoint:
         if file_sha(self.path/'fusion_head.pt')!=c['weights_sha256']:raise ValueError('Checkpoint weights changed or are incomplete')
         self.text_spec=EncoderSpec(**c['encoders']['text'])
         self.image_spec=ImageEncoderSpec(**c['encoders']['image'])
-        self.head=FactFusionHead(self.text_spec,self.image_spec.patch_dim,c['hidden'],c['heads'],text_mode=c['text_mode']).to(device)
+        self.head=FactFusionHead(self.text_spec,self.image_spec.patch_dim,c['hidden'],c['heads'],text_mode=c['text_mode'],fusion_method=c.get('fusion_method','cross_attention')).to(device)
         self.head.load_state_dict(torch.load(self.path/'fusion_head.pt',map_location=device,weights_only=True),strict=True)
         self.head.eval()
         self.model_id='fusion:'+c['weights_sha256'][:16]
