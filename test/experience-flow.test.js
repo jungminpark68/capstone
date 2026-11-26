@@ -100,11 +100,11 @@ test('동행자 없음과 첫 혼자 자전거라는 긍정 단서를 혼동하�
  const noSpecial=localExperienceEvents({date,turns:[{question:MEMORABLE_OPENING,answer:'특별히 기억에 남는 일은 없어요.'},...session().turns]});assert.equal(noSpecial.length,2);
 });
 
-test('HTTP: 선택 사건 본문을 다듬는 모델에도 전체 일기·미선택 사건을 전달하지 않는다',async t=>{
- let sent;
- const request=await requestFor(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async(url,options)=>{sent=JSON.parse(options.body);return Response.json({choices:[{message:{content:JSON.stringify({body:'공원에서 손녀를 응원했다.'})}}]});}});
+test('HTTP: 선택 사건 본문은 확인 필드로 조합하고 외부 모델로 다시 쓰지 않는다',async t=>{
+ let calls=0;
+ const request=await requestFor(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async()=>{calls++;throw new Error('unexpected rewrite');}});
  const record=complete(localExperienceEvents(session())[1]);record.scene=composeExperienceScene(record);
  const response=await request('scene-text',{...record,diaryNarrative:story,supportingContext:['병원에서 진료를 받았다.'],confirmed:true});
- assert.equal(response.status,200);assert.equal(response.data.body,'공원에서 손녀를 응원했다.');
- assert.doesNotMatch(sent.messages[1].content[0].text,/병원|diaryNarrative|supportingContext/);
+ assert.equal(response.status,200);assert.equal(response.data.textSource,'confirmed_fields');assert.equal(calls,0);
+ assert.match(response.data.body,/벤치에 앉아 응원/);assert.doesNotMatch(response.data.body,/병원/);
 });

@@ -14,6 +14,19 @@ const flowPlacePattern=/(?:[가-힣A-Za-z0-9·-]{0,14})?(?:공원|병원|치과|
 function flowPlace(text){const name=[...text.matchAll(flowPlacePattern)][0]?.[0]||'';return {id:'',name,type:Object.entries(flowPlaceTypes).find(([suffix])=>name.endsWith(suffix))?.[1]||'unknown'};}
 function flowTime(text){return /오전|아침/.test(text)?'morning':/오후|점심|낮/.test(text)?'afternoon':/저녁/.test(text)?'evening':/밤/.test(text)?'night':'unknown';}
 function flowEmotion(text){const labels=[];for(const [key,pattern] of [['happy',/좋았|좋아|즐거|기뻤|기쁘|행복|뿌듯|고마|감사|재밌/],['calm',/편안|평온|차분/],['sad',/슬펐|슬프|우울|속상/],['worried',/걱정|불안|무거웠/],['angry',/화났|화가|짜증/],['tired',/피곤|힘들/]])if(pattern.test(text))labels.push(key);return labels;}
+// Return the speaker's words, never a feeling inferred from an achievement/action.
+export function utteranceEmotion(answer,{question=''}={}){
+ const text=flowText(answer,1000),direct=experienceQuestionField(question)==='emotion';
+ const explicit=part=>flowEmotion(part).length||/무서|겁이|아쉬|서운|섭섭|설레|긴장|심심|지루|만족|후련|보람|감동|외로|외롭|그리웠|당황|놀랐|기분|마음/.test(part);
+ if(!text||/^(?:네|예|맞아요|그래요)[.!。]?$/.test(text))return null;
+ const refusal=flowRefusal(text);
+ if(direct&&refusal)return {text:'',labels:[],status:refusal==='none'?'unknown':refusal};
+ const quoted=direct?text:text.split(/(?<=[.!?。])\s*|\n/).filter(explicit).join(' ');
+ if(!quoted)return null;
+ // Preserve negation/ambivalence in the original words; don't turn it into a positive label.
+ const labels=/않|아니|안\s|없|모르|글쎄|아마|것\s*같/.test(quoted)?[]:flowEmotion(quoted);
+ return {text:quoted,labels,status:'provided'};
+}
 function flowRefusal(answer){
  if(/^(?:잘\s*)?(?:모르|기억(?:이|나지|은)?\s*(?:안|않)|생각(?:이)?\s*안)/.test(answer))return 'unknown';
  if(/넘어|건너|말하고\s*싶지|답하.*싫|그만|지금.*불편|이(?:야기|질문).*불편/.test(answer))return 'declined';
@@ -70,6 +83,7 @@ function flowPersonActions(text,people){
  for(const [index,subject] of subjects.entries()){
   const name=subject[2]||'나';if(!people.some(person=>person.name===name))continue;
   const action=text.slice(subject.index+subject[0].length,subjects[index+1]?.index??text.length).split(/[.!?。\n]/)[0].trim();
+  if(/그림일기|그림으로|남기고\s*싶|남길래|남겨\s*주|그려\s*주|(?:이야기|사건|장면)(?:을|를|으로|로)\s*선택/.test(action))continue;
   if(!/수영|연습|배웠|배우|손을?\s*잡|탔|타고|타는|탄\s|타면서|걸었|걷|산책|앉|응원|손뼉|박수|먹었|먹고|마셨|마시|진료|검진|읽었|읽고|뛰|달렸|놀았|놀고|이야기했|대화했|요리|만들었|장보기/.test(action))continue;
   if(/않|못했|안\s*(?:탔|타|먹|갔|했)/.test(action))continue;
   result.set(name,flowText(action,200));
@@ -99,8 +113,8 @@ export function supplementExperience(value,answer,{question=''}={}){
   for(const name of objects)if(!r.objects.some(object=>object.name===name)&&r.objects.length<6)r.objects.push({id:`object-${r.objects.length+1}`,name,count:null});
   s.objects='provided';
  }
- const labels=flowEmotion(text);
- if(fillable('emotion')&&labels.length){const feelingText=text.split(/(?<=[.!?。])\s*|\n/).filter(part=>flowEmotion(part).length).join(' ');r.emotion={text:feelingText||text,labels,status:'provided'};s.emotion='provided';}
+ const statedEmotion=utteranceEmotion(text);
+ if(fillable('emotion')&&statedEmotion){r.emotion=statedEmotion;s.emotion=statedEmotion.status;}
  const cue=text.split(/(?<=[.!?。])\s*/).find(part=>/처음|가장\s*기억|특히\s*기억|인상\s*깊/.test(part)&&!flowRefusal(part));
  if(fillable('memoryCue')&&cue){r.memoryCue=flowText(cue,300);r.memoryCueStatus='provided';s.memoryCue='provided';}
  if(fillable('topic')&&r.activity){r.topic=r.activity;r.topicSource='derived_from_activity';s.topic='provided';}
@@ -111,7 +125,7 @@ export function supplementExperience(value,answer,{question=''}={}){
    s[field]=status;
    if(field==='emotion')r.emotion={text:'',labels:[],status};
    if(field==='memoryCue'){r.memoryCue='';r.memoryCueStatus=status;}
-  }else if(field==='emotion'){r.emotion={text,labels,status:'provided'};s.emotion='provided';}
+  }else if(field==='emotion'){r.emotion=utteranceEmotion(text,{question})||{text:'',labels:[],status:'unknown'};s.emotion=r.emotion.status;}
   else if(field==='memoryCue'){r.memoryCue=flowText(text,300);r.memoryCueStatus='provided';s.memoryCue='provided';}
   else if(field.startsWith('action:')&&!actions.size){const person=r.people.find(p=>p.id===field.slice(7));if(person){person.action=flowText(text,200);s[field]='provided';}}
  }
@@ -198,7 +212,7 @@ export function applyCollectionAnswer(value,field,answer){
  r.collectionStatus[field]=status;
  r.sourceEvidence.answers.push({field,question:asked?.field===field?asked.question:'선택한 경험의 추가 정보 확인',quote:text,status,answeredAt:new Date().toISOString()});
  if(field==='memoryCue'){r.memoryCueStatus=status;r.memoryCue=status==='provided'?text:'';}
- else if(field==='emotion'){r.emotion={text:status==='provided'?text:'',labels:status==='provided'?flowEmotion(text):[],status};}
+ else if(field==='emotion'){r.emotion=status==='provided'?(utteranceEmotion(text,{question:asked?.question||'그때 기분은 어떠셨어요?'})||{text:'',labels:[],status:'unknown'}):{text:'',labels:[],status};r.collectionStatus.emotion=r.emotion.status;}
  else if(status==='provided'){
   if(field==='activity'){r.activity=flowText(text,200);r.topic=r.topic||flowText(text,200);r.topicSource=r.topicSource==='not_collected'?'derived_from_activity':r.topicSource;r.collectionStatus.topic='provided';if(r.people.length===1&&!r.people[0].action){r.people[0].action=text;r.collectionStatus[`action:${r.people[0].id}`]='provided';}}
   if(field==='place'){const place=flowPlace(text);r.place={...place,name:place.name||text,type:place.type==='unknown'?'other':place.type};}
@@ -254,10 +268,14 @@ export function selectedDiaryText(record){
  const time={morning:'아침에',afternoon:'오후에',evening:'저녁에',night:'밤에'}[record.timeOfDay]||'';
  const place=record.place.name||'';
  const lines=[place?`${time?time+' ':''}${place}에서 시간을 보냈다.`:''];
- for(const person of record.people)if(person.action){const label=person.name==='나'?'나는':flowSubject(person.name);lines.push(`${label} ${person.action.replace(/[.。]+$/,'')}.`);}
+ for(const person of record.people)if(person.action){const label=person.name==='나'?'나는':flowSubject(person.name);const action=person.action.replace(/[.。,，;\s]+$/,'').replace(/(았|었|였|했|탔|봤|갔|왔)고$/,'$1어요');lines.push(`${label} ${action}.`);}
  if(!record.people.some(p=>p.action)&&record.activity)lines.push(record.activity.replace(/[.。]+$/,'')+'.');
  if(record.emotion?.status==='provided'&&record.emotion.text)lines.push(record.emotion.text.replace(/[.。]+$/,'')+'.');
- if(record.memoryCueStatus==='provided'&&record.memoryCue)lines.push(record.memoryCue.replace(/[.。]+$/,'')+'.');
+ if(record.memoryCueStatus==='provided'&&record.memoryCue){
+  let additional=record.memoryCue;
+  for(const person of record.people)if(person.action){additional=additional.replaceAll(person.action.replace(/[.。]+$/,''),'');for(const subject of person.name==='나'?['나는','내가','저는','제가']:['은','는','이','가','도'].map(particle=>person.name+particle))additional=additional.replaceAll(subject,'');}
+  if(additional.replace(/그리고|그다음에|[\s,.!?。]/g,''))lines.push(record.memoryCue.replace(/[.。]+$/,'')+'.');
+ }
  const seen=new Set();
  return lines.filter(Boolean).filter(line=>{
   let key=line;

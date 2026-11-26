@@ -1,6 +1,5 @@
 // Team handoff contract; images, dialogue and appearance settings stay in app storage.
 import {PLACE_TYPES} from './diary-record.js';
-import {EMOTION_LABELS} from './experience-flow.js';
 
 export const DIARY_EVENTS_SCHEMA='memory-itda-diary-events-v1';
 export const DIARY_ELEMENT_KEYS=['place','person','activity','object','emotion'];
@@ -20,8 +19,7 @@ function exportEvent(event,text){
  const s=event.collectionStatus||{},people=exportAvailable(s.people)?exportArray(event.people):[];
  const activity=exportAvailable(s.activity)?exportString(event.activity):'';
  const emotion=event.emotion||{};
- const feelings=exportAvailable(emotion.status??s.emotion)
-  ?exportString(emotion.text)?[emotion.text]:exportArray(emotion.labels).map(label=>EMOTION_LABELS[label]||label):[];
+ const feelings=exportAvailable(emotion.status??s.emotion)&&exportString(emotion.text)?[emotion.text]:[];
  const place=exportAvailable(s.place)&&event.place?.type!=='unknown'
   ?exportString(event.place?.name)||(event.place?.type!=='other'?PLACE_TYPES[event.place?.type]:''):'';
  return {eventId:exportString(event.id),eventText:exportString(text)||exportString(event.scene),

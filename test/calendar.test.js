@@ -54,8 +54,8 @@ test('AI: 캘린더 예정은 별도 맥락, 내일 발언은 초안 입력에�
  const req=await request(t,{env:{DIARY_API_KEY:'test-only'},fetcher:async(url,options)=>{const payload=JSON.parse(options.body);calls.push(payload);return Response.json({choices:[{message:{content:JSON.stringify(payload.messages[0].content.includes('초안을 만든다')?{title:'산책',body:'오늘 공원을 걸었다.',scene:'공원 산책'}:{question:'산책할 때 어떤 풍경이 보였나요?',ready:false})}}]});}});
  await req('question',{date,todayEvents:[event],turns:[{question:'오늘은요?',answer:'병원은 안 가고 산책했어요.'}]});
  const context=JSON.parse(calls[0].messages[1].content[0].text);assert.equal(context.todayEvents[0].title,event.title);assert.match(context.turns[0].answer,/안 가고/);
- await req('draft',{date,todayEvents:[event],turns:[{question:'오늘은요?',answer:'오늘 공원을 걸었어요. 내일 병원에 가요.'}]});
- const draft=JSON.parse(calls[1].messages[1].content[0].text);assert.doesNotMatch(draft.turns[0].answer,/내일/);
+ const draft=await req('draft',{date,todayEvents:[event],turns:[{question:'오늘은요?',answer:'오늘 공원을 걸었어요. 내일 병원에 가요.'}]});
+ assert.equal(calls.length,1);assert.equal(draft.status,200);assert.doesNotMatch(draft.data.body,/내일|병원/);assert.match(draft.data.body,/오늘 공원/);
 });
 
 test('전달받은 치과 예약은 짧은 방문 제목과 명시한 장소로 정리한다',()=>{

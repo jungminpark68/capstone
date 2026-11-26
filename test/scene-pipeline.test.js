@@ -28,7 +28,7 @@ test('화풍·품질과 생성 방식은 독립 요인이며 같은 사실 목�
 test('발언 근거가 없는 추출 결과는 채우지 않고 장면 초안을 자동 확정하지 않는다',()=>{
  const draft={title:'공원',body:'손녀와 공원에 갔다.',scene:'공원에서 쉬었다.'},session={date:'2026-11-18',turns:[{question:'어디요?',answer:'손녀와 공원에 갔어요.'}]};
  const candidate=sceneCandidate(draft,session,{activity:{value:'병원 진료',evidence:'없는 발언'},place:{name:'호수공원',type:'park',evidence:'손녀와 공원에 갔어요.'}});
- assert.equal(candidate.confirmed,false);assert.equal(candidate.activity,'');assert.equal(candidate.place.type,'park');assert.equal(candidate.people[0].action,'');
+ assert.equal(candidate.confirmed,false);assert.equal(candidate.activity,'');assert.equal(candidate.place.type,'unknown');assert.equal(candidate.place.name,'');assert.equal(candidate.people[0].action,'');
 });
 
 test('완성 일기에 메인·전체 이야기·생성 설정을 보관하고 원본 사진을 넣지 않는다',()=>{

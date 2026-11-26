@@ -206,7 +206,7 @@ async function completeScene({skipPicture=false}={}){
   const record=sceneForm.confirm(true);chooseExperience(state.experienceBundle,record.id);
   putSelectedCandidate(record);state.sceneRecord=record;state.sceneCandidate=record;
   state.draft.scene=record.scene;state.draft.title=record.title;
-  try{const text=await api('scene-text',record);state.draft.body=text.body;}catch{state.draft.body=selectedDiaryText(record);}
+  state.draft.body=selectedDiaryText(record);
   if(skipPicture){
    checkAbort?.abort();checkAbort=null;state.image='';state.imageScene='';state.imageEventId=null;state.imageGeneration=null;state.imageId=null;state.imageVerification=null;state.imageSkippedForTest=true;
   }else{
