@@ -12,7 +12,7 @@ if not args.prefix or '/' in args.prefix or '\\' in args.prefix or args.prefix i
 output = args.out
 output.parent.mkdir(parents=True, exist_ok=True)
 files = ['package.json', '.gitignore', '.env.example', 'start-windows.cmd', 'README.md', 'CHANGELOG.md',
-         'demo.html', 'verification-demo.html']
+         'demo.html', 'verification-demo.html', 'ml/templates/pilot-review.html']
 files.extend(path.name for path in root.glob('*.js'))
 for folder in ['public', 'scripts', 'test', 'contracts']:
     files.extend(str(p.relative_to(root)) for p in (root / folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts)

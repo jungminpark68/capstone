@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>기억잇다 · 판정기 정답 검토</title>
+<style>
+:root{font:17px/1.65 system-ui,'Malgun Gothic',sans-serif;color:#293e34;background:#f7f6ef}*{box-sizing:border-box}body{margin:0}header,main{max-width:1250px;margin:auto;padding:24px}header{border-bottom:1px solid #d8dfd0}h1{font-size:1.7rem;margin:4px 0}h2{font-size:1.15rem;margin:0}p{margin:8px 0}button,input,select{font:inherit}button,.file-button{min-height:48px;padding:10px 16px;border:1px solid #bdcaba;border-radius:10px;background:white;color:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #ba8940;outline-offset:3px}.primary{background:#345c49;color:white;border-color:#345c49}.tools,.navigation{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0}.tools input[type=text]{max-width:220px;padding:10px;border:1px solid #81957e;border-radius:8px}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,1fr);gap:24px}.picture img{width:100%;height:auto;display:block;border-radius:14px;background:white}.picture{align-self:start;position:sticky;top:15px}.context{white-space:pre-wrap;border:1px solid #d9e1d3;border-radius:12px;background:white;padding:16px;margin-top:14px}.facts{display:grid;gap:12px}.fact{border:1px solid #d9e1d3;border-radius:12px;background:white;padding:16px}.fact label{display:block;font-weight:650;margin-bottom:10px}.fact select{width:100%;padding:10px;border:1px solid #7c9078;border-radius:8px;background:white}.hint{font-size:.85rem;color:#5f6f59;margin-top:8px}.notice{background:#e9efdf;border-radius:10px;padding:12px 16px}.muted{color:#5d6e59;font-size:.88rem}.confirm{display:flex;align-items:flex-start;gap:10px;padding:16px 0}.confirm input{width:24px;height:24px;flex-shrink:0;accent-color:#345c49}.file-button input{max-width:220px}.chips{display:flex;gap:6px;flex-wrap:wrap}.chips button{padding:5px 9px;min-height:40px}.chips button[aria-current=true]{outline:2px solid #345c49}.chips .done{background:#e2edd9}.progress{font-weight:700}#status{min-height:30px;font-weight:600}details{margin-top:18px}summary{cursor:pointer;min-height:44px}details>p{font-size:.88rem}.footer-tools{border-top:1px solid #d9e1d3;margin-top:28px;padding-top:14px}.danger{color:#96472d}[hidden]{display:none!important}@media(max-width:850px){.layout{grid-template-columns:1fr}.picture{position:static}header,main{padding:18px}.navigation button{flex:1}.tools input[type=text]{max-width:100%}}
+</style></head><body>
+<header><p class="muted">기억잇다 · 그림과 사실 비교 · 20장 예비 실험</p><h1>그림을 보고 정답을 확인해 주세요</h1><p>요청한 대로 그려졌는지가 아니라, <strong>실제 그림에서 보이는 것</strong>을 기준으로 골라주세요.</p>
+<div class="tools"><label>검토자 ID <input id="reviewer" type="text" maxlength="80" placeholder="예: team-01"></label><span id="progress" class="progress"></span></div>
+<details><summary>일치 · 불일치 · 판단 불가 기준</summary><p><strong>일치:</strong> 그림에서 사실을 확인할 수 있어요.<br><strong>불일치:</strong> 그림이 사실과 명확히 달라요. 필수 대상이 명확히 빠진 경우도 포함해요.<br><strong>판단 불가:</strong> 가려짐·불명확한 행동·색 구분 등으로 결론을 내릴 수 없어요.</p><p>AI 초벌은 틀릴 수 있어요. 시험용 그림에는 초벌 답을 표시하지 않습니다. 날짜·실명·가족관계·감정은 그림에서 추측하지 않습니다.</p></details>
+</header>
+<main><nav id="chips" class="chips" aria-label="검토할 그림"></nav><div class="navigation"><button id="previous">← 이전 그림</button><h2 id="heading" tabindex="-1"></h2><button id="next">다음 그림 →</button></div><p id="mode" class="notice"></p>
+<div class="layout"><section class="picture"><img id="picture" alt="정답을 검토할 생성 그림"><div class="context"><strong>원래 표현하려던 사건</strong><p id="scene"></p><strong>인물을 구별할 약속</strong><p id="characters"></p></div><p class="muted">A/B는 그림 속 인물 구별 기준이에요. 실제 신원이나 가족관계를 판정하지 않아요.</p></section>
+<section><div id="facts" class="facts"></div><label class="confirm"><input id="confirmed" type="checkbox"><span>그림과 모든 항목을 직접 확인했어요.</span></label><button id="save" class="primary">이 그림의 정답 확정 후 다음</button><p id="status" role="status" aria-live="polite"></p></section></div>
+<section class="footer-tools"><h2>검토 결과 보관</h2><p class="muted">확정한 정답만 내려받습니다. 중간에도 보관할 수 있고, Kaggle 학습은 20장 모두 확정한 파일이 필요해요.</p><div class="tools"><button id="download" class="primary">검토 결과 JSON 받기</button><label class="file-button">이전 검토 이어받기 <input id="restore" type="file" accept="application/json,.json"></label></div><p id="storageNote" class="muted"></p><details><summary>이 브라우저의 검토 상태 비우기</summary><p>내려받은 파일과 원본 그림은 지우지 않아요.</p><button id="clear" class="danger">검토 상태 비우기</button></details></section>
+</main>
+<script id="pilot-data" type="application/json">__PILOT_DATA__</script>
+<script>
+'use strict';
+const source=JSON.parse(document.getElementById('pilot-data').textContent);
+const $=id=>document.getElementById(id),labels={supported:'일치',contradicted:'불일치',uncertain:'판단 불가'};
+const key='memory-verifier-review-'+source.dataset_id;
+let state={reviewer:'',reviews:{},edits:{}},index=0;
+function validateReview(r){
+ const item=source.items.find(row=>row.id===r.image_id);
+ if(!item||r.confirmed_by_human!==true||typeof r.reviewer!=='string'||!r.reviewer.trim()||r.image_sha256!==item.image_sha256)throw Error('그림·검토자·확정 정보를 확인해 주세요.');
+ if(!r.labels||Object.keys(r.labels).length!==item.facts.length||item.facts.some(f=>!Object.hasOwn(labels,r.labels[f.id])))throw Error('모든 항목의 정답을 확인해 주세요.');
+ if(!['blind','assisted'].includes(r.review_mode)||source.groups[item.group_id]==='test'&&r.review_mode!=='blind')throw Error('시험용 그림은 초벌 답 없이 검토해야 해요.');
+ return r;
+}
+try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){for(const r of Object.values(saved.reviews||{}))validateReview(r);state={reviewer:typeof saved.reviewer==='string'?saved.reviewer:'',reviews:saved.reviews||{},edits:saved.edits||{}};}}catch{$('storageNote').textContent='이전 임시 상태를 읽지 못했어요. 보관한 검토 JSON으로 이어받을 수 있어요.';}
+$('reviewer').value=state.reviewer;
+function persist(){try{localStorage.setItem(key,JSON.stringify(state));$('storageNote').textContent='이 브라우저에 임시 보관했어요. 다른 기기로 옮기려면 검토 JSON을 받아 주세요.';}catch{$('storageNote').textContent='자동 보관이 어려워요. 화면을 닫기 전에 검토 JSON을 받아 주세요.';}}
+function progress(){
+ const done=Object.keys(state.reviews).length;$('progress').textContent=`확정 ${done} / ${source.items.length}장`;
+ $('chips').replaceChildren();source.items.forEach((row,i)=>{const b=document.createElement('button');b.textContent=(state.reviews[row.id]?'✓ ':'')+(i+1);b.className=state.reviews[row.id]?'done':'';b.setAttribute('aria-current',String(index===i));b.onclick=()=>{index=i;render();};$('chips').append(b);});
+}
+function currentLabels(){return Object.fromEntries([...document.querySelectorAll('[data-fact]')].map(select=>[select.dataset.fact,select.value]));}
+function invalidate(){const row=source.items[index];state.edits[row.id]=currentLabels();delete state.reviews[row.id];$('confirmed').checked=false;progress();persist();}
+function render(){
+ const row=source.items[index],blind=source.groups[row.group_id]==='test';
+ $('heading').textContent=`그림 ${index+1} / ${source.items.length}`;$('picture').src='source/'+row.image;
+ $('scene').textContent=row.scene;$('characters').textContent=row.characters;
+ $('mode').textContent=blind?'초벌 답 없이 직접 확인하는 그림이에요.':'AI 초벌이 선택돼 있어요. 틀린 항목을 고친 뒤 직접 확인하고 확정해 주세요.';
+ $('facts').replaceChildren();const saved=state.edits[row.id]||state.reviews[row.id]?.labels||{};
+ for(const [i,fact] of row.facts.entries()){
+  const card=document.createElement('div');card.className='fact';const label=document.createElement('label');label.textContent=`${i+1}. ${fact.text}`;
+  const select=document.createElement('select');select.id='fact-'+i;select.dataset.fact=fact.id;label.htmlFor=select.id;
+  for(const [value,text] of [['','직접 골라주세요'],...Object.entries(labels)]){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}
+  select.value=saved[fact.id]??(!blind?fact.draft_label||'':'');select.onchange=invalidate;card.append(label,select);
+  if(!blind&&fact.draft_label){const hint=document.createElement('p');hint.className='hint';hint.textContent=`AI 초벌: ${labels[fact.draft_label]} · ${fact.draft_reason||'직접 확인 필요'}`;card.append(hint);}
+  $('facts').append(card);
+ }
+ $('confirmed').checked=Boolean(state.reviews[row.id]);$('status').textContent='';progress();
+ $('previous').disabled=index===0;$('next').disabled=index===source.items.length-1;
+}
+$('reviewer').oninput=()=>{state.reviewer=$('reviewer').value.trim();persist();};
+$('previous').onclick=()=>{if(index>0){index--;render();}};$('next').onclick=()=>{if(index<source.items.length-1){index++;render();}};
+$('save').onclick=()=>{
+ try{
+  const row=source.items[index];if(!$('confirmed').checked)throw Error('그림과 모든 항목을 직접 확인한 뒤 체크해 주세요.');
+  const r=validateReview({image_id:row.id,image_sha256:row.image_sha256,reviewer:state.reviewer,labels:currentLabels(),confirmed_by_human:true,review_mode:source.groups[row.group_id]==='test'?'blind':'assisted',reviewed_at:new Date().toISOString()});
+  state.reviews[row.id]=r;delete state.edits[row.id];persist();
+  if(index<source.items.length-1){index++;render();$('heading').focus({preventScroll:true});$('heading').scrollIntoView({block:'start'});}else{progress();$('status').textContent='이 그림을 확정했어요. 남은 그림도 확인한 뒤 검토 JSON을 받아 주세요.';}
+ }catch(error){$('status').textContent=error.message;}
+};
+function exportReview(){return {schema:'memory-itda-verifier-human-review-v1',dataset_id:source.dataset_id,reviews:Object.values(state.reviews).map(validateReview)};}
+$('download').onclick=()=>{const data=exportReview();const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='memory-verifier-human-review.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('restore').onchange=async event=>{
+ try{const file=event.target.files?.[0];if(!file)return;if(file.size>2000000)throw Error('검토 JSON은 2MB 이하로 준비해 주세요.');const value=JSON.parse(await file.text());
+  if(value.software_test_only===true)throw Error('소프트웨어 검사용 파일은 실제 정답으로 이어받을 수 없어요.');
+  if(value.schema!=='memory-itda-verifier-human-review-v1'||value.dataset_id!==source.dataset_id||!Array.isArray(value.reviews))throw Error('이 그림 묶음의 검토 JSON을 선택해 주세요.');
+  const incoming={};for(const row of value.reviews){validateReview(row);if(incoming[row.image_id])throw Error('같은 그림의 검토가 중복돼 있어요.');incoming[row.image_id]=row;}
+  state.reviews={...state.reviews,...incoming};for(const id of Object.keys(incoming))delete state.edits[id];persist();render();$('status').textContent='확정한 검토를 이어받았어요.';
+ }catch(error){$('status').textContent=error.message;}finally{event.target.value='';}
+};
+$('clear').onclick=()=>{if(!confirm('이 브라우저의 검토 상태를 비울까요? 필요한 결과 JSON을 먼저 받아 주세요.'))return;state={reviewer:state.reviewer,reviews:{},edits:{}};persist();render();};
+render();
+</script></body></html>

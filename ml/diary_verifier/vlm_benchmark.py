@@ -1,4 +1,4 @@
-"""Sealed development/final-test protocol for pretrained -> plain LoRA -> relation LoRA."""
+"""Sealed development/final-test protocol for pretrained and selected LoRA conditions."""
 import argparse
 import hashlib
 import json
@@ -22,12 +22,17 @@ def directory_hash(folder):
 
 def create_plan(data, out, base_models=None, epochs=2, batch_size=2, accumulation=4,
                 lr=1e-4, pair_weight=.25, lora_rank=16, seed=42, four_bit=True,
-                max_pixels=200704, balanced=True, resolver=None):
+                max_pixels=200704, balanced=True, resolver=None, methods=None):
     data, out = Path(data).resolve(), Path(out).resolve()
     if out.exists():
         raise ValueError("Choose a new experiment directory; previous runs are preserved")
-    if epochs < 1 or batch_size < 2 or accumulation < 1 or lr <= 0 or pair_weight <= 0 or lora_rank < 1:
+    if epochs < 1 or batch_size < 1 or accumulation < 1 or lr <= 0 or pair_weight < 0 or lora_rank < 1:
         raise ValueError("Invalid matched A/B/C settings")
+    methods = list(methods if methods is not None else ("plain", "relation"))
+    if not methods or len(set(methods)) != len(methods) or any(m not in ("plain", "relation") for m in methods):
+        raise ValueError("Choose plain and/or relation without duplicates")
+    if "relation" in methods and (batch_size < 2 or pair_weight <= 0):
+        raise ValueError("Relation training needs batch size >=2 and a positive pair weight")
     info = json.loads((data / "dataset-info.json").read_text())
     if info.get("data_purpose") not in ("synthetic_controlled", "collected_human_reviewed_data"):
         raise ValueError("Use controlled schematic data or human-reviewed generated images")
@@ -69,6 +74,7 @@ def create_plan(data, out, base_models=None, epochs=2, batch_size=2, accumulatio
                      "four_bit": four_bit, "max_pixels": max_pixels, "balanced": balanced},
         "output_protocol": "same_original_LM_head_conditional_A_B_C_no_random_classifier",
         "test_used_for_selection": False,
+        "methods": methods,
     }
     out.mkdir(parents=True)
     atomic_json(out / "plan.json", plan)
@@ -164,7 +170,8 @@ def develop(plan_path, runner=run_module):
     pretrained = dev_folder / "pretrained.jsonl"
     shutil.copyfile(candidates[0]["predictions"], pretrained)
     paths, adapter_hashes = [pretrained], {}
-    for method, weight in (("plain", 0.), ("relation", settings["pair_weight"])):
+    for method in plan.get("methods", ["plain", "relation"]):
+        weight = 0. if method == "plain" else settings["pair_weight"]
         adapter = out / method
         if not (adapter / "training-complete.json").exists():
             if adapter.exists() and any(adapter.iterdir()):
@@ -222,7 +229,7 @@ def final_test(plan_path, runner=run_module):
     folder.mkdir(exist_ok=True)
     paths = [predict_condition(plan, seal["base"], "test", folder / (method + ".jsonl"),
                                None if method == "pretrained" else out / method, runner)
-             for method in ("pretrained", "plain", "relation")]
+             for method in ["pretrained", *plan.get("methods", ["plain", "relation"])]]
     report = comparison(plan, "test", paths, out / "final-test-comparison.json")
     atomic_json(out / "test-complete.json", {"selection_sha256": seal_sha,
                                            "report_sha256": file_sha(out / "final-test-comparison.json")})
@@ -283,6 +290,7 @@ def main():
         init.add_argument("--" + name, type=kind, default=default)
     init.add_argument("--no-four-bit", action="store_true")
     init.add_argument("--unbalanced", action="store_true")
+    init.add_argument("--methods", nargs="+", choices=["plain", "relation"], default=["plain", "relation"])
     for command in ("develop", "test"):
         child = sub.add_parser(command)
         child.add_argument("--plan", required=True)
@@ -290,7 +298,7 @@ def main():
     if args.command == "init":
         print(create_plan(args.data, args.out, args.base_models, args.epochs, args.batch_size,
                           args.accumulation, args.lr, args.pair_weight, args.lora_rank, args.seed,
-                          not args.no_four_bit, args.max_pixels, not args.unbalanced))
+                          not args.no_four_bit, args.max_pixels, not args.unbalanced, methods=args.methods))
     elif args.command == "develop":
         print(json.dumps(develop(args.plan), ensure_ascii=False, indent=2))
     else:
