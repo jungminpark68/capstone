@@ -85,8 +85,7 @@ export function renderDiaryDetail(container,entry){
   importance.append(stars,diaryNode('p','diary-note',`선택한 경험의 중요도 ${model.rating.value}점 · 그림의 품질 점수가 아니에요.`));
  }else importance.append(diaryNode('p','diary-note',model.rating.status==='skipped'?'별점은 나중에 매기기로 했어요.':'아직 남긴 별점이 없어요.'));
  paper.append(importance);layout.append(paper);
- const metadata=diaryNode('aside','diary-metadata');metadata.setAttribute('aria-label','같이 저장한 정보');
- metadata.append(diaryNode('p','diary-kicker','이 이야기의 단서'),diaryNode('h2','','같이 저장한 정보'));
+ const metadata=diaryDisclosure('이 이야기의 단서 보기','diary-metadata');metadata.setAttribute('aria-label','같이 저장한 정보');
  if(model.record){
   const dl=diaryNode('dl');
   for(const field of model.metadata){
@@ -102,10 +101,10 @@ export function renderDiaryDetail(container,entry){
   }
  }else metadata.append(diaryNode('p','diary-note','이 일기에는 장소·인물 같은 별도 정보가 저장되지 않았어요. 남겨둔 글과 그림은 그대로 볼 수 있어요.'));
  layout.append(metadata);container.append(layout);
- const check=currentDiaryCheck(entry);if(check){const panel=diaryNode('section');renderDiaryCheck(panel,check);container.append(panel);}
+ const check=currentDiaryCheck(entry);if(check){const panel=diaryNode('section');panel.dataset.developerTool='';renderDiaryCheck(panel,check);container.append(panel);}
 
  if(model.conversation.length){
-  const dialogue=diaryDisclosure('어떤 대화로 완성했나요?','diary-dialogue',true);
+  const dialogue=diaryDisclosure('어떤 대화로 완성했나요?','diary-dialogue');
   dialogue.append(diaryNode('p','diary-note','처음 나눈 이야기부터 한 사건을 고르고 내용을 채운 과정까지 볼 수 있어요.'));
   const turns=diaryNode('ol','diary-turns');
   const phases={today_story:'오늘 이야기',selected_event_details:'선택한 이야기의 추가 확인',event_selection:'그림으로 남길 이야기 선택',future_plans:'앞으로의 일정 · 오늘 경험과 별도',importance:'선택한 경험의 중요도'};

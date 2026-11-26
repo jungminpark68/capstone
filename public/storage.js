@@ -51,7 +51,7 @@ export async function resetAppData(){
   tx.objectStore('meta').put({id:'legacy-v2',done:true});
   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('기록을 초기화하지 못했어요.'));
  });
- for(const key of ['memory-diary-v2','memory-diary-large-type'])try{localStorage.removeItem(key);}catch{}
+ for(const key of ['memory-diary-v2','memory-diary-large-type','memory-diary-developer-tools','memory-diary-skip-image-test'])try{localStorage.removeItem(key);}catch{}
 }
 export async function putEvents(events){
  const db=await database();return new Promise((resolve,reject)=>{

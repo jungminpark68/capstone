@@ -143,3 +143,14 @@
 
 /* Optional integration tools stay collapsed during everyday use. */
 .events-export{margin:24px 0}.events-export-json{white-space:pre-wrap;overflow-wrap:anywhere;max-height:460px;overflow:auto;background:#f4f5ef;padding:16px;border-radius:12px;font:14px/1.6 monospace;text-align:left}.settings-panel .scene-confirm{align-items:flex-start}
+
+/* Show only everyday diary actions until development tools are requested. */
+body:not(.developer-mode) [data-developer-tool]{display:none!important}
+.test-completion{margin-top:20px;padding:18px;border:1px dashed var(--green);border-radius:14px;background:var(--sage)}
+.test-completion .helper{margin-top:10px}
+.diary-metadata>summary,.diary-verification-panel>summary{font-weight:700;min-height:48px;cursor:pointer}
+.diary-verification-panel>summary{margin-bottom:12px}
+#scenePreparation{margin-top:22px}#scenePreparation>.actions{margin-bottom:12px}
+#reviewOverview>.paper{margin-bottom:26px}#resultOptions>button{margin-top:14px}
+.events-export button{max-width:100%}
+@media(max-width:680px){.test-completion>button{width:100%}}
