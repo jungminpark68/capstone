@@ -10,7 +10,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ml"))
-from diary_verifier.pilot_data import make_source
+from diary_verifier.pilot_data import make_source, load_source
 
 
 def md(text):
@@ -159,6 +159,42 @@ print("실제 학습 결과와 LoRA 가중치는 이 셀 실행 뒤 생성됩니
                                "version": "0.20.0", "bundle_sha256": digest}}, "nbformat": 4, "nbformat_minor": 5}
 
 
+def render_review(source):
+    template = (ROOT / "ml/templates/pilot-review.html").read_text(encoding="utf-8")
+    payload = json.dumps(source, ensure_ascii=False).replace("<", "\\u003c")
+    return template.replace("__PILOT_DATA__", payload)
+
+
+def build_review_update(source_path, out):
+    source_path, out = Path(source_path).resolve(), Path(out).resolve()
+    if out.exists():
+        raise ValueError("Use a new ZIP filename")
+    source = load_source(source_path)
+    page = render_review(source)
+    note = """기억잇다 정답 검토 화면 · v0.20.1
+
+1. 지금까지 검토한 결과가 있으면 기존 화면의 '검토 결과 JSON 받기'로 보관해 주세요.
+2. 이 ZIP의 01_review.html을 기존 그림 20장이 있는 폴더의 01_review.html에 덮어씁니다.
+3. 기존 source 폴더는 그대로 두고 01_review.html을 다시 엽니다.
+4. 자동으로 이어지지 않으면 '이전 검토 이어받기'로 보관한 JSON을 선택합니다.
+
+그림과 사건·정답 항목 ID, 학습 자료, 2번 Kaggle 노트북은 바꾸지 않았습니다.
+문장과 초벌 설명에서 A/B 대신 '초록색 상의 할머니', '파란색 상의 손주'처럼 표시합니다.
+인물은 각 그림의 옷 색 기준으로 구분하며, 좌우 위치가 바뀌어도 같은 인물입니다.
+"""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with ZipFile(out, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("01_review.html", page)
+        archive.writestr("업데이트안내.txt", note)
+    with ZipFile(out) as archive:
+        assert archive.testzip() is None
+        assert archive.read("01_review.html").decode() == page
+    print(json.dumps({"file": str(out), "bytes": out.stat().st_size,
+                      "sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+                      "dataset_id": source["dataset_id"], "compatible_source_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+                      "images_included": False, "review_update_only": True}, ensure_ascii=False))
+
+
 def build(manifest, out):
     out = Path(out).resolve()
     if out.exists():
@@ -167,9 +203,7 @@ def build(manifest, out):
         root = Path(folder) / "memory-verifier-pilot-v0.20"
         root.mkdir()
         source = make_source(manifest, root / "source")
-        template = (ROOT / "ml/templates/pilot-review.html").read_text(encoding="utf-8")
-        payload = json.dumps(source, ensure_ascii=False).replace("<", "\\u003c")
-        (root / "01_review.html").write_text(template.replace("__PILOT_DATA__", payload), encoding="utf-8")
+        (root / "01_review.html").write_text(render_review(source), encoding="utf-8")
         (root / "02_train_compare_kaggle.ipynb").write_text(json.dumps(notebook(), ensure_ascii=False, indent=2), encoding="utf-8")
         shutil.copyfile(ROOT / "docs/verifier-pilot-guide.md", root / "README.md")
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -188,7 +222,12 @@ def build(manifest, out):
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--manifest", required=True)
+    mode = p.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--manifest")
+    mode.add_argument("--review-source", help="Existing pilot-source.json: build an HTML-only update preserving dataset IDs")
     p.add_argument("--out", required=True)
     a = p.parse_args()
-    build(a.manifest, a.out)
+    if a.review_source:
+        build_review_update(a.review_source, a.out)
+    else:
+        build(a.manifest, a.out)

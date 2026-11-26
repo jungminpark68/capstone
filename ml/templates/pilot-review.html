@@ -8,7 +8,7 @@
 <details><summary>일치 · 불일치 · 판단 불가 기준</summary><p><strong>일치:</strong> 그림에서 사실을 확인할 수 있어요.<br><strong>불일치:</strong> 그림이 사실과 명확히 달라요. 필수 대상이 명확히 빠진 경우도 포함해요.<br><strong>판단 불가:</strong> 가려짐·불명확한 행동·색 구분 등으로 결론을 내릴 수 없어요.</p><p>AI 초벌은 틀릴 수 있어요. 시험용 그림에는 초벌 답을 표시하지 않습니다. 날짜·실명·가족관계·감정은 그림에서 추측하지 않습니다.</p></details>
 </header>
 <main><nav id="chips" class="chips" aria-label="검토할 그림"></nav><div class="navigation"><button id="previous">← 이전 그림</button><h2 id="heading" tabindex="-1"></h2><button id="next">다음 그림 →</button></div><p id="mode" class="notice"></p>
-<div class="layout"><section class="picture"><img id="picture" alt="정답을 검토할 생성 그림"><div class="context"><strong>원래 표현하려던 사건</strong><p id="scene"></p><strong>인물을 구별할 약속</strong><p id="characters"></p></div><p class="muted">A/B는 그림 속 인물 구별 기준이에요. 실제 신원이나 가족관계를 판정하지 않아요.</p></section>
+<div class="layout"><section class="picture"><img id="picture" alt="정답을 검토할 생성 그림"><div class="context"><strong>이 그림의 인물</strong><div id="characters"></div><p class="muted">옷 색으로 구분해 주세요. 좌우 위치가 바뀌어도 같은 인물이에요.</p><strong>원래 표현하려던 사건</strong><p id="scene"></p></div><p class="muted">할머니·손주는 검토를 돕기 위한 호칭이에요. 위치 조건은 그림에서 따로 확인해 주세요.</p></section>
 <section><div id="facts" class="facts"></div><label class="confirm"><input id="confirmed" type="checkbox"><span>그림과 모든 항목을 직접 확인했어요.</span></label><button id="save" class="primary">이 그림의 정답 확정 후 다음</button><p id="status" role="status" aria-live="polite"></p></section></div>
 <section class="footer-tools"><h2>검토 결과 보관</h2><p class="muted">확정한 정답만 내려받습니다. 중간에도 보관할 수 있고, Kaggle 학습은 20장 모두 확정한 파일이 필요해요.</p><div class="tools"><button id="download" class="primary">검토 결과 JSON 받기</button><label class="file-button">이전 검토 이어받기 <input id="restore" type="file" accept="application/json,.json"></label></div><p id="storageNote" class="muted"></p><details><summary>이 브라우저의 검토 상태 비우기</summary><p>내려받은 파일과 원본 그림은 지우지 않아요.</p><button id="clear" class="danger">검토 상태 비우기</button></details></section>
 </main>
@@ -19,6 +19,24 @@ const source=JSON.parse(document.getElementById('pilot-data').textContent);
 const $=id=>document.getElementById(id),labels={supported:'일치',contradicted:'불일치',uncertain:'판단 불가'};
 const key='memory-verifier-review-'+source.dataset_id;
 let state={reviewer:'',reviews:{},edits:{}},index=0;
+function reviewActors(row){
+ return row.characters.split(/\r?\n/).flatMap(line=>{
+  const match=line.match(/^\s*([A-Z])\s*[:：]\s*(.+?)\s*$/);if(!match)return [];
+  const [,alias,description]=match;
+  const role=/어르신|할머니/.test(description)?'할머니':/아이|어린이|손주|손녀|손자/.test(description)?'손주':null;
+  const clothing=role?description.replace(/(?:의\s*)?(?:어르신|할머니|아이|어린이|손주|손녀|손자)\s*$/,'').trim():'';
+  return [{alias,role:role||description,description,name:role?(clothing?clothing+' '+role:role):description}];
+ });
+}
+function actorText(row,text){
+ const actors=Object.fromEntries(reviewActors(row).map(actor=>[actor.alias,actor.name]));
+ return String(text||'').replace(/\b([A-Z])(은|는|이|가|을|를|와|과)?(?![A-Za-z0-9_])/g,(whole,alias,particle)=>{
+  const name=actors[alias];if(!name)return whole;
+  const last=name.codePointAt(name.length-1),hasFinal=last>=44032&&last<=55203&&(last-44032)%28!==0;
+  const pairs={은:['은','는'],는:['은','는'],이:['이','가'],가:['이','가'],을:['을','를'],를:['을','를'],와:['과','와'],과:['과','와']};
+  return name+(particle?pairs[particle][hasFinal?0:1]:'');
+ });
+}
 function validateReview(r){
  const item=source.items.find(row=>row.id===r.image_id);
  if(!item||r.confirmed_by_human!==true||typeof r.reviewer!=='string'||!r.reviewer.trim()||r.image_sha256!==item.image_sha256)throw Error('그림·검토자·확정 정보를 확인해 주세요.');
@@ -38,15 +56,16 @@ function invalidate(){const row=source.items[index];state.edits[row.id]=currentL
 function render(){
  const row=source.items[index],blind=source.groups[row.group_id]==='test';
  $('heading').textContent=`그림 ${index+1} / ${source.items.length}`;$('picture').src='source/'+row.image;
- $('scene').textContent=row.scene;$('characters').textContent=row.characters;
+ $('scene').textContent=actorText(row,row.scene);$('characters').replaceChildren();
+ for(const actor of reviewActors(row)){const line=document.createElement('p');const name=document.createElement('strong');name.textContent=actor.name;line.append(name);$('characters').append(line);}
  $('mode').textContent=blind?'초벌 답 없이 직접 확인하는 그림이에요.':'AI 초벌이 선택돼 있어요. 틀린 항목을 고친 뒤 직접 확인하고 확정해 주세요.';
  $('facts').replaceChildren();const saved=state.edits[row.id]||state.reviews[row.id]?.labels||{};
  for(const [i,fact] of row.facts.entries()){
-  const card=document.createElement('div');card.className='fact';const label=document.createElement('label');label.textContent=`${i+1}. ${fact.text}`;
+  const card=document.createElement('div');card.className='fact';const label=document.createElement('label');label.textContent=`${i+1}. ${actorText(row,fact.text)}`;
   const select=document.createElement('select');select.id='fact-'+i;select.dataset.fact=fact.id;label.htmlFor=select.id;
   for(const [value,text] of [['','직접 골라주세요'],...Object.entries(labels)]){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);}
   select.value=saved[fact.id]??(!blind?fact.draft_label||'':'');select.onchange=invalidate;card.append(label,select);
-  if(!blind&&fact.draft_label){const hint=document.createElement('p');hint.className='hint';hint.textContent=`AI 초벌: ${labels[fact.draft_label]} · ${fact.draft_reason||'직접 확인 필요'}`;card.append(hint);}
+  if(!blind&&fact.draft_label){const hint=document.createElement('p');hint.className='hint';hint.textContent=`AI 초벌: ${labels[fact.draft_label]} · ${actorText(row,fact.draft_reason||'직접 확인 필요')}`;card.append(hint);}
   $('facts').append(card);
  }
  $('confirmed').checked=Boolean(state.reviews[row.id]);$('status').textContent='';progress();
